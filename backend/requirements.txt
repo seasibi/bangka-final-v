@@ -1,0 +1,28 @@
+Django==5.1.7
+channels==4.1.0
+channels-redis==4.2.0
+daphne==4.1.2
+
+# REST API
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+
+django-cors-headers==4.6.0
+
+django-filter==24.3
+
+# DB (using PyMySQL to avoid compiling mysqlclient on Windows)
+PyMySQL==1.1.1
+
+# Async/Tasks
+celery==5.4.0
+redis==5.0.8
+
+# Utils
+requests==2.32.3
+pandas==2.2.3
+Pillow==11.0.0
+python-dotenv==1.0.1
+
+# Additional deps used by models/migrations
+django-multiselectfield==0.1.13

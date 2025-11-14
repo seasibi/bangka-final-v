@@ -1,0 +1,462 @@
+import React, { useEffect, useState } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  GeoJSON,
+  useMap,
+  Tooltip,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
+import municipalGeoJSON from "./geoData/map_municipal";
+import waterBoundaries from "./geoData/water_boundaries";
+import { apiClient } from "../services/api_urls";
+
+// Simple Haversine distance in meters
+const metersBetween = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000; // meters
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const DEAD_BAND_METERS = 7; // ignore moves smaller than this
+
+// Add this style to remove the outline on click
+const mapStyle = `
+  .leaflet-container {
+    outline: none !important;
+  }
+  .leaflet-interactive {
+    outline: none !important;
+  }
+`;
+
+const FitBoundsView = ({ geoJsonData }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!geoJsonData) return;
+
+    const geoJsonLayer = L.geoJSON(geoJsonData);
+    const bounds = geoJsonLayer.getBounds();
+    const paddedBounds = bounds.pad(0.1);
+
+    map.fitBounds(paddedBounds);
+    map.setMinZoom(map.getZoom() - 2);
+    map.setMaxZoom(18);
+
+    // Remove focus outline on map click
+    map.getContainer().style.outline = "none";
+  }, [geoJsonData, map]);
+
+  return null;
+};
+
+const MapView = () => {
+  const [selectedMunicipality, setSelectedMunicipality] = useState(null);
+  const [boatData, setBoatData] = useState(null);
+  const [smoothFeatures, setSmoothFeatures] = useState([]); // per-boat latest, filtered by deadband
+  const [landBoundaries, setLandBoundaries] = useState(null);
+  const [waterBoundaries, setWaterBoundaries] = useState(null);
+
+  const municipalityColors = {
+    Bauang: "#FFB6C1",
+    Bacnotan: "#90EE90",
+    Balaoan: "#E6B3E6",
+    Bangar: "#7c1d7cff",
+    Caba: "#ece596ff",
+    "City 0f San Fernando": "#E8E8E8",
+    "San Juan": "#d1d6e9ff",
+    "Sto. Tomas": "#075477ff",
+    Luna: "#d6ddaeff",
+    Rosario: "#a176e6ff",
+  };
+
+  const getLandStyle = (feature) => {
+  const name = feature.properties.name; // ✅ backend sends "name"
+  return {
+    fillColor: municipalityColors[name] || "#CCCCCC",
+    weight: 2,
+    opacity: 1,
+    color: selectedMunicipality === name ? "#000" : "#666",
+    fillOpacity: selectedMunicipality === name ? 0.7 : 0.5,
+    interactive: true,
+  };
+};
+
+  const getWaterStyle = (feature) => {
+  const name = feature.properties.name;
+  const baseColor = municipalityColors[name] || "#CCCCCC";
+  return {
+    fillColor: baseColor,
+    weight: 2,
+    opacity: 0.8,
+    color: selectedMunicipality === name ? "#000" : "#666",
+    fillOpacity: 0.25,
+    dashArray: "5, 5", // ✅ striped outline to differentiate water
+    interactive: true,
+  };
+};
+
+  // Fetch boat GPS positions periodically
+  useEffect(() => {
+    const fetchBoundaries = async () => {
+    try {
+      const res = await apiClient.get("boundaries/");
+      const data = res.data;
+
+      // Normalization function for geometry
+      const normalizeGeometry = (coords) => {
+        if (!coords) return null;
+
+        // Already valid GeoJSON
+        if (coords.type && coords.coordinates) return coords;
+
+        // Flat array of [lng, lat] → wrap into Polygon
+        if (Array.isArray(coords[0]) && typeof coords[0][0] === "number") {
+          return {
+            type: "Polygon",
+            coordinates: [coords], // wrap in an array to form a ring
+          };
+        }
+
+        // Array of arrays of rings → MultiPolygon
+        return {
+          type: "MultiPolygon",
+          coordinates: coords,
+        };
+      };
+
+      // Land Features
+      const landFeatures = data.map((item) => ({
+        type: "Feature",
+        properties: {
+          name: item.name,
+          waterArea: item.water_area,
+          coastlineLength: item.coastline_length,
+        },
+        geometry: normalizeGeometry(item.coordinates),
+      }));
+
+      // Water Features (duplicate with flag for styling)
+      const waterFeatures = data.map((item) => ({
+        type: "Feature",
+        properties: {
+          name: item.name,
+          waterArea: item.water_area,
+          coastlineLength: item.coastline_length,
+          isWater: true,
+        },
+        geometry: normalizeGeometry(item.coordinates),
+      }));
+
+      // Save to state
+      setLandBoundaries({
+        type: "FeatureCollection",
+        features: landFeatures,
+      });
+
+      setWaterBoundaries({
+        type: "FeatureCollection",
+        features: waterFeatures,
+      });
+
+      // Debugging logs
+      console.log("Sample land feature:", landFeatures[0]);
+      console.log("Sample water feature:", waterFeatures[0]);
+    } catch (err) {
+      console.error("Failed to fetch boundaries", err);
+    }
+  };
+
+  fetchBoundaries();
+}, []);
+
+  useEffect(() => {
+    const fetchBoats = async () => {
+      try {
+        const res = await apiClient.get("gps/geojson/");
+        const data = res.data;
+        setBoatData(data); // keep raw for debugging if needed
+
+        // latest point per boat_id (backend is already newest-first)
+        const latest = new Map();
+        if (data?.features) {
+          for (const feat of data.features) {
+            const id = feat?.properties?.boat_id ?? 0;
+            if (!latest.has(id)) latest.set(id, feat);
+          }
+        }
+
+        // Apply 7 m deadband vs previous accepted position
+        setSmoothFeatures((prev) => {
+          const prevMap = new Map(
+            (prev || []).map((f) => [f?.properties?.boat_id ?? 0, f])
+          );
+          const next = [];
+          for (const [id, feat] of latest.entries()) {
+            const [lng, lat] = feat.geometry.coordinates || [0, 0];
+            const prevFeat = prevMap.get(id);
+            if (prevFeat) {
+              const [plng, plat] = prevFeat.geometry.coordinates || [0, 0];
+              const d = metersBetween(plat, plng, lat, lng);
+              if (isFinite(d) && d < DEAD_BAND_METERS) {
+                // Keep previous geometry; update properties (timestamp/status) from latest
+                next.push({
+                  ...prevFeat,
+                  properties: { ...prevFeat.properties, ...feat.properties },
+                });
+                continue;
+              }
+            }
+            // Accept new point
+            next.push(feat);
+          }
+          return next;
+        });
+      } catch (err) {
+        console.error("Failed to fetch boat locations", err);
+      }
+    };
+
+    // initial load
+    fetchBoats();
+    // refresh every 15 seconds
+    const interval = setInterval(fetchBoats, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const onEachLandFeature = (feature, layer) => {
+  const name = feature.properties.name;
+
+  layer.on({
+    mouseover: () => setSelectedMunicipality(name),
+    mouseout: () => setSelectedMunicipality(null),
+    click: (e) => {
+      L.DomEvent.stopPropagation(e);
+      setSelectedMunicipality(name);
+    },
+  });
+
+  layer.bindTooltip(
+    `<div>
+      <strong>${name}</strong><br/>
+      Coastline Length: ${feature.properties.coastlineLength || "n/a"} km
+    </div>`,
+    { sticky: true }
+  );
+};
+
+  const onEachWaterFeature = (feature, layer) => {
+  const name = feature.properties.name;
+  const waterArea = feature.properties.waterArea || "n/a";
+  const coastlineLength = feature.properties.coastlineLength || "n/a";
+
+  layer.on({
+    mouseover: () => setSelectedMunicipality(name),
+    mouseout: () => setSelectedMunicipality(null),
+    click: (e) => {
+      L.DomEvent.stopPropagation(e);
+      setSelectedMunicipality(name);
+    },
+  });
+
+  layer.bindTooltip(
+    `<div>
+      <strong>${name}</strong><br/>
+      Water Area: ${waterArea} sq km<br/>
+      Coastline Length: ${coastlineLength} km
+    </div>`,
+    { sticky: true }
+  );
+};
+
+  // Custom CSS for modern simple marker
+  const markerCSS = `
+    .boat-marker {
+      width: 18px;
+      height: 18px;
+      background: #e53935; /* online: bright red */
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 0 8px rgba(229,57,53,0.6);
+      display: inline-block;
+      position: relative;
+    }
+    .boat-marker::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      margin-left: -9px;
+      margin-top: -9px;
+      border: 2px solid rgba(229,57,53,0.5);
+      border-radius: 50%;
+      animation: boatPulse 1.8s ease-out infinite;
+    }
+    .boat-marker.offline {
+      background: #9e9e9e; /* grey */
+      box-shadow: 0 0 4px rgba(0,0,0,0.2);
+    }
+    .boat-marker.offline::after { display: none; }
+    @keyframes boatPulse {
+      0% { transform: scale(1); opacity: 0.7; }
+      70% { transform: scale(2.2); opacity: 0; }
+      100% { opacity: 0; }
+    }
+  `;
+
+  // Helper to generate consistent color per boat id
+  const getBoatColor = (id) => {
+    const hue = (id * 47) % 360; // pseudo-random but deterministic
+    return `hsl(${hue}, 70%, 45%)`;
+  };
+
+  // Create a DivIcon factory so each boat can have its own color
+  const createBoatIcon = (color, status) =>
+    L.divIcon({
+      className: "",
+      html: `<span class="boat-marker ${status === "offline" ? "offline" : ""}" style="background:${color}"></span>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9],
+    });
+
+  return (
+    <>
+      <style>{mapStyle + markerCSS}</style>
+      <MapContainer
+        center={[16.6154, 120.3199]}
+        zoom={12}
+        scrollWheelZoom={true}
+        zoomControl={true}
+        className="h-full w-full z-0"
+        dragging={true}
+        doubleClickZoom={true}
+        attributionControl={false}
+      >
+        {/* Base map switched to OSM standard to avoid built-in POI dots entirely */}
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution="&copy; OpenStreetMap contributors"
+        />
+
+        {/* Land Boundaries */}
+        {landBoundaries && (
+          <GeoJSON
+            data={landBoundaries}
+            style={getLandStyle}
+            onEachFeature={onEachLandFeature}
+          />
+        )}
+
+        {/* Water Boundaries */}
+        {waterBoundaries && (
+          <GeoJSON
+            data={waterBoundaries}
+            style={getWaterStyle}
+            onEachFeature={onEachWaterFeature}
+          />
+        )}
+
+        {/* Boat Positions */}
+        {smoothFeatures && smoothFeatures.length > 0 && (
+          <GeoJSON
+            key={JSON.stringify(
+              smoothFeatures.map((f) => [
+                f.properties?.boat_id,
+                f.properties?.timestamp,
+                ...f.geometry.coordinates,
+              ])
+            )}
+            data={{
+              type: "FeatureCollection",
+              features: smoothFeatures,
+            }}
+            pointToLayer={(feature, latlng) => {
+              const status = feature.properties.status || "unknown";
+              const color =
+                status === "offline"
+                  ? "#9e9e9e"
+                  : getBoatColor(feature.properties.boat_id);
+              const marker = L.marker(latlng, {
+                icon: createBoatIcon(color, status),
+              });
+              marker.setZIndexOffset(1000);
+              return marker;
+            }}
+            onEachFeature={(feature, layer) => {
+              const { boat_id, timestamp, status, age_seconds } =
+                feature.properties;
+              const mins = Math.floor((age_seconds || 0) / 60);
+              const secs = (age_seconds || 0) % 60;
+              const ageText =
+                age_seconds != null ? `${mins}m ${secs}s ago` : "n/a";
+              layer.bindTooltip(
+                `<div><strong>Boat ID:</strong> ${boat_id}<br/><strong>Status:</strong> ${status?.toUpperCase() || "UNKNOWN"}<br/><strong>Last update:</strong> ${new Date(timestamp).toLocaleString()} (${ageText})</div>`,
+                { sticky: true }
+              );
+            }}
+          />
+        )}
+
+        <FitBoundsView geoJsonData={municipalGeoJSON} />
+      </MapContainer>
+
+      {/* Updated Legend */}
+      <div className="absolute bottom-20 right-4 bg-white/90 p-4 rounded-xl shadow-md z-20">
+        <h3 className="font-semibold mb-2">Legend</h3>
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="boat-marker inline-block"
+              style={{ background: "#e53935" }}
+            />
+            <span className="text-sm">Online</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="boat-marker offline inline-block"
+              style={{ background: "#9e9e9e" }}
+            />
+            <span className="text-sm">Offline (no update for 3+ min)</span>
+          </div>
+        </div>
+        <h4 className="font-medium mb-1">Municipalities</h4>
+        <div className="space-y-2">
+          {Object.entries(municipalityColors).map(([name, color]) => (
+            <div key={name} className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <div
+                  className="w-4 h-4 rounded"
+                  style={{ backgroundColor: color, opacity: 0.5 }}
+                />
+                <div
+                  className="w-4 h-4 rounded"
+                  style={{ backgroundColor: "#B3E0E5", opacity: 0.3 }}
+                />
+              </div>
+              <span className="text-sm">{name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 text-xs text-gray-600">
+          <div>Solid: Land Area</div>
+          <div>Striped: Water Territory</div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default MapView;

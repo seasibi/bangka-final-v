@@ -1,0 +1,16 @@
+{
+  "TRK-001": [
+    {
+      "tsISO": "2025-11-11T15:09:04.126Z",
+      "status": "online",
+      "detail": "Tracker came online"
+    }
+  ],
+  "TRK-002": [
+    {
+      "tsISO": "2025-11-11T15:09:04.139Z",
+      "status": "online",
+      "detail": "Tracker came online"
+    }
+  ]
+}

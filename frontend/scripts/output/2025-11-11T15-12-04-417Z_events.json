@@ -1,0 +1,662 @@
+[
+  {
+    "tracker_id": "TRK-001",
+    "type": "online",
+    "message": "Tracker came online",
+    "tsISO": "2025-11-11T15:09:04.126Z"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61585560458443,
+    "lng": 120.3176334761882,
+    "heading": 144,
+    "timestamp": "2025-11-11T15:09:04.141Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.616405293373912,
+    "lng": 120.31799808410939,
+    "heading": 32,
+    "timestamp": "2025-11-11T15:09:09.152Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61691207908299,
+    "lng": 120.31840328498707,
+    "heading": 37,
+    "timestamp": "2025-11-11T15:09:14.161Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61764131030623,
+    "lng": 120.31894235323125,
+    "heading": 35,
+    "timestamp": "2025-11-11T15:09:19.175Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.618126760449616,
+    "lng": 120.31928603574715,
+    "heading": 34,
+    "timestamp": "2025-11-11T15:09:24.176Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.618635236636127,
+    "lng": 120.31970341873368,
+    "heading": 38,
+    "timestamp": "2025-11-11T15:09:29.183Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61933107209912,
+    "lng": 120.32029117479158,
+    "heading": 39,
+    "timestamp": "2025-11-11T15:09:34.188Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.620012440582325,
+    "lng": 120.32083925722728,
+    "heading": 38,
+    "timestamp": "2025-11-11T15:09:39.196Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.620556799736594,
+    "lng": 120.32129760767361,
+    "heading": 39,
+    "timestamp": "2025-11-11T15:09:44.201Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62072327226859,
+    "lng": 120.32026982237892,
+    "heading": 280,
+    "timestamp": "2025-11-11T15:09:49.209Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.6209086746739,
+    "lng": 120.319243577251,
+    "heading": 281,
+    "timestamp": "2025-11-11T15:09:54.221Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621033618537034,
+    "lng": 120.31847408966296,
+    "heading": 280,
+    "timestamp": "2025-11-11T15:09:59.236Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621135558705674,
+    "lng": 120.3178578556706,
+    "heading": 280,
+    "timestamp": "2025-11-11T15:10:04.246Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62127477894935,
+    "lng": 120.31714691498655,
+    "heading": 282,
+    "timestamp": "2025-11-11T15:10:09.250Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621464844397472,
+    "lng": 120.31640197339108,
+    "heading": 285,
+    "timestamp": "2025-11-11T15:10:14.256Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621685997310788,
+    "lng": 120.31537905658233,
+    "heading": 283,
+    "timestamp": "2025-11-11T15:10:19.267Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621806110075706,
+    "lng": 120.31467795833234,
+    "heading": 280,
+    "timestamp": "2025-11-11T15:10:24.268Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.622034428077512,
+    "lng": 120.3137904765572,
+    "heading": 285,
+    "timestamp": "2025-11-11T15:10:29.274Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62227036382325,
+    "lng": 120.31271754645469,
+    "heading": 283,
+    "timestamp": "2025-11-11T15:10:34.280Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.621758881037454,
+    "lng": 120.31297973635556,
+    "heading": 154,
+    "timestamp": "2025-11-11T15:10:39.284Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62116178278669,
+    "lng": 120.31326653131933,
+    "heading": 155,
+    "timestamp": "2025-11-11T15:10:44.299Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62041466584087,
+    "lng": 120.31359458443484,
+    "heading": 157,
+    "timestamp": "2025-11-11T15:10:49.311Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.619738948744896,
+    "lng": 120.31393978734219,
+    "heading": 154,
+    "timestamp": "2025-11-11T15:10:54.319Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.618990867646783,
+    "lng": 120.31435116765952,
+    "heading": 152,
+    "timestamp": "2025-11-11T15:10:59.331Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.618214864495013,
+    "lng": 120.3147019440917,
+    "heading": 157,
+    "timestamp": "2025-11-11T15:11:04.345Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.617566303059334,
+    "lng": 120.31508314863324,
+    "heading": 151,
+    "timestamp": "2025-11-11T15:11:09.349Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.616920889834688,
+    "lng": 120.31537852207013,
+    "heading": 156,
+    "timestamp": "2025-11-11T15:11:14.361Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.616183669217534,
+    "lng": 120.3157496345733,
+    "heading": 154,
+    "timestamp": "2025-11-11T15:11:19.362Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.615291258830734,
+    "lng": 120.31620754484697,
+    "heading": 154,
+    "timestamp": "2025-11-11T15:11:24.372Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61623243681593,
+    "lng": 120.31667197947412,
+    "heading": 25,
+    "timestamp": "2025-11-11T15:11:29.378Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.616966156832525,
+    "lng": 120.31702066326997,
+    "heading": 24,
+    "timestamp": "2025-11-11T15:11:34.387Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.61793152703274,
+    "lng": 120.31747735596063,
+    "heading": 24,
+    "timestamp": "2025-11-11T15:11:39.389Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.618599778853095,
+    "lng": 120.31776939643275,
+    "heading": 23,
+    "timestamp": "2025-11-11T15:11:44.390Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.619426200581508,
+    "lng": 120.31817138973906,
+    "heading": 25,
+    "timestamp": "2025-11-11T15:11:49.393Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.62019483062949,
+    "lng": 120.31853455201545,
+    "heading": 24,
+    "timestamp": "2025-11-11T15:11:54.397Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-001",
+    "lat": 16.620813070208005,
+    "lng": 120.3188404345436,
+    "heading": 25,
+    "timestamp": "2025-11-11T15:11:59.403Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "type": "online",
+    "message": "Tracker came online",
+    "tsISO": "2025-11-11T15:09:04.139Z"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.61587005223733,
+    "lng": 120.31762880080022,
+    "heading": 34,
+    "timestamp": "2025-11-11T15:09:04.141Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.616176896687833,
+    "lng": 120.31685033972855,
+    "heading": 292,
+    "timestamp": "2025-11-11T15:09:09.152Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.616446388383252,
+    "lng": 120.3163178734348,
+    "heading": 298,
+    "timestamp": "2025-11-11T15:09:14.161Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.615568427630873,
+    "lng": 120.31620026539996,
+    "heading": 187,
+    "timestamp": "2025-11-11T15:09:19.175Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.614976057073758,
+    "lng": 120.3161092558526,
+    "heading": 188,
+    "timestamp": "2025-11-11T15:09:24.176Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.614433969709,
+    "lng": 120.31606498190828,
+    "heading": 184,
+    "timestamp": "2025-11-11T15:09:29.183Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.613735432204454,
+    "lng": 120.31592534068756,
+    "heading": 191,
+    "timestamp": "2025-11-11T15:09:34.188Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.613083412744576,
+    "lng": 120.31582332614619,
+    "heading": 189,
+    "timestamp": "2025-11-11T15:09:39.196Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.61250255412255,
+    "lng": 120.31575318867206,
+    "heading": 187,
+    "timestamp": "2025-11-11T15:09:44.201Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.613440616417762,
+    "lng": 120.31561213845784,
+    "heading": 352,
+    "timestamp": "2025-11-11T15:09:49.209Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.614183405259894,
+    "lng": 120.31553075924425,
+    "heading": 354,
+    "timestamp": "2025-11-11T15:09:54.221Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.61483159464318,
+    "lng": 120.31542236676542,
+    "heading": 351,
+    "timestamp": "2025-11-11T15:09:59.236Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.615349837514955,
+    "lng": 120.31532402565402,
+    "heading": 350,
+    "timestamp": "2025-11-11T15:10:04.246Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.61601020241451,
+    "lng": 120.31521288855114,
+    "heading": 351,
+    "timestamp": "2025-11-11T15:10:09.250Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.616577240585546,
+    "lng": 120.31508887825757,
+    "heading": 348,
+    "timestamp": "2025-11-11T15:10:14.256Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.617244975360922,
+    "lng": 120.31527064669527,
+    "heading": 15,
+    "timestamp": "2025-11-11T15:10:19.267Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.618177431449432,
+    "lng": 120.31559712978655,
+    "heading": 19,
+    "timestamp": "2025-11-11T15:10:24.268Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.619146241643474,
+    "lng": 120.31593048622305,
+    "heading": 18,
+    "timestamp": "2025-11-11T15:10:29.274Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.619744830245452,
+    "lng": 120.31612225180939,
+    "heading": 17,
+    "timestamp": "2025-11-11T15:10:34.280Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.620384992764397,
+    "lng": 120.3163551051628,
+    "heading": 19,
+    "timestamp": "2025-11-11T15:10:39.284Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.62129554423806,
+    "lng": 120.31662616809301,
+    "heading": 16,
+    "timestamp": "2025-11-11T15:10:44.299Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.62206773608312,
+    "lng": 120.3168764728878,
+    "heading": 17,
+    "timestamp": "2025-11-11T15:10:49.311Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.622725996923656,
+    "lng": 120.31707755676265,
+    "heading": 16,
+    "timestamp": "2025-11-11T15:10:54.319Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.623562239937854,
+    "lng": 120.31731317601017,
+    "heading": 15,
+    "timestamp": "2025-11-11T15:10:59.331Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.624134509762868,
+    "lng": 120.31747940231607,
+    "heading": 16,
+    "timestamp": "2025-11-11T15:11:04.345Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.62498797313504,
+    "lng": 120.31779238345693,
+    "heading": 19,
+    "timestamp": "2025-11-11T15:11:09.349Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.625954579231884,
+    "lng": 120.3181278086577,
+    "heading": 18,
+    "timestamp": "2025-11-11T15:11:14.361Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.626688203727294,
+    "lng": 120.31835008603166,
+    "heading": 16,
+    "timestamp": "2025-11-11T15:11:19.362Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.62756896609591,
+    "lng": 120.31858793090264,
+    "heading": 15,
+    "timestamp": "2025-11-11T15:11:24.372Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.62814244533617,
+    "lng": 120.31872276780138,
+    "heading": 13,
+    "timestamp": "2025-11-11T15:11:29.378Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.629126078649783,
+    "lng": 120.31900626861308,
+    "heading": 15,
+    "timestamp": "2025-11-11T15:11:34.387Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.630054686335182,
+    "lng": 120.31930124266114,
+    "heading": 17,
+    "timestamp": "2025-11-11T15:11:39.389Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.630929500061967,
+    "lng": 120.3195279899093,
+    "heading": 14,
+    "timestamp": "2025-11-11T15:11:44.390Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.631781339199637,
+    "lng": 120.31979531303489,
+    "heading": 17,
+    "timestamp": "2025-11-11T15:11:49.393Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.632447422727303,
+    "lng": 120.31998590892245,
+    "heading": 15,
+    "timestamp": "2025-11-11T15:11:54.397Z",
+    "status": "online",
+    "type": "location_update"
+  },
+  {
+    "tracker_id": "TRK-002",
+    "lat": 16.633287086029636,
+    "lng": 120.32020075049844,
+    "heading": 14,
+    "timestamp": "2025-11-11T15:11:59.403Z",
+    "status": "online",
+    "type": "location_update"
+  }
+]

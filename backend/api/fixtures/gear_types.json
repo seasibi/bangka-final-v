@@ -1,0 +1,201 @@
+[
+  {
+    "model": "api.gearclassification",
+    "pk": 1,
+    "fields": { "name": "Marine" }
+  },
+  {
+    "model": "api.gearclassification",
+    "pk": 2,
+    "fields": { "name": "Inland" }
+  },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 1,
+    "fields": { "name": "Marine Surrounding Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 101, "fields": { "name": "SN Baby Ring Net", "gear_type": 1 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 2,
+    "fields": { "name": "Marine Falling Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 201, "fields": { "name": "FN Cast Net", "gear_type": 2 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 3,
+    "fields": { "name": "Marine Fishing Aggregating Device / Payao", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 301, "fields": { "name": "FAD Steel Drum", "gear_type": 3 } },
+  { "model": "api.gearsubtype", "pk": 302, "fields": { "name": "FAD Bamboo", "gear_type": 3 } },
+  { "model": "api.gearsubtype", "pk": 303, "fields": { "name": "FAD Styropore", "gear_type": 3 } },
+  { "model": "api.gearsubtype", "pk": 304, "fields": { "name": "FAD Bamboo Raft", "gear_type": 3 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 4,
+    "fields": { "name": "Marine Seine Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 401, "fields": { "name": "SNT Round Haul Seine", "gear_type": 4 } },
+  { "model": "api.gearsubtype", "pk": 402, "fields": { "name": "SNT Beach Seine", "gear_type": 4 } },
+  { "model": "api.gearsubtype", "pk": 403, "fields": { "name": "SNT Frydozer", "gear_type": 4 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 5,
+    "fields": { "name": "Marine Scoop Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 501, "fields": { "name": "SCN Man Push Net", "gear_type": 5 } },
+  { "model": "api.gearsubtype", "pk": 502, "fields": { "name": "SCN Motorized Boat Push Net", "gear_type": 5 } },
+  { "model": "api.gearsubtype", "pk": 503, "fields": { "name": "SCN Scoop Net", "gear_type": 5 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 6,
+    "fields": { "name": "Marine Miscellaneous Gear", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 601, "fields": { "name": "MMG Gaff Hook", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 602, "fields": { "name": "MMG Rake / Dredge", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 603, "fields": { "name": "MMG Squid Luring Device", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 604, "fields": { "name": "MMG Octupus Luring Device", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 605, "fields": { "name": "MMG Miracle Hole", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 606, "fields": { "name": "MMG Spear Gun", "gear_type": 6 } },
+  { "model": "api.gearsubtype", "pk": 607, "fields": { "name": "MMG Spear", "gear_type": 6 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 7,
+    "fields": { "name": "Marine Lift Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 701, "fields": { "name": "LN Bagnet", "gear_type": 7 } },
+  { "model": "api.gearsubtype", "pk": 702, "fields": { "name": "LN Stationary Lift Net", "gear_type": 7 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 8,
+    "fields": { "name": "Marine Cast Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 801, "fields": { "name": "CN Gill Net", "gear_type": 8 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 9,
+    "fields": { "name": "Marine Traps and Pots", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 901, "fields": { "name": "MTP Lobster Trap", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 902, "fields": { "name": "MTP Lever Net", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 903, "fields": { "name": "MTP Shrimp Lift Net", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 904, "fields": { "name": "MTP Set Net", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 905, "fields": { "name": "MTP Fish Coral", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 906, "fields": { "name": "MTP Flyke Net", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 907, "fields": { "name": "MTP Crab Pot", "gear_type": 9 } },
+  { "model": "api.gearsubtype", "pk": 908, "fields": { "name": "MTP Fish Pot", "gear_type": 9 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 10,
+    "fields": { "name": "Marine Gill Net", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 1001, "fields": { "name": "GN Encircling Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1002, "fields": { "name": "GN Crab Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1003, "fields": { "name": "GN Trammel Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1004, "fields": { "name": "GN Bottom Set Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1005, "fields": { "name": "GN Midwater Set Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1006, "fields": { "name": "GN Surface Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1007, "fields": { "name": "GN Small Pelagic Drift Gill Net", "gear_type": 10 } },
+  { "model": "api.gearsubtype", "pk": 1008, "fields": { "name": "GN Tuna/Bill Fish Frift Gill Net", "gear_type": 10 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 11,
+    "fields": { "name": "Marine Hook and Line", "classification": 1 }
+  },
+  { "model": "api.gearsubtype", "pk": 1101, "fields": { "name": "HL Demersal Hook and Line", "gear_type": 11 } },
+  { "model": "api.gearsubtype", "pk": 1102, "fields": { "name": "HL Tuna Hook and Line", "gear_type": 11 } },
+  { "model": "api.gearsubtype", "pk": 1103, "fields": { "name": "HL Small Pelagic Hook and Line", "gear_type": 11 } },
+  { "model": "api.gearsubtype", "pk": 1104, "fields": { "name": "HL Tuna Handline", "gear_type": 11 } },
+  { "model": "api.gearsubtype", "pk": 1105, "fields": { "name": "HL Thread Fin Bream", "gear_type": 11 } },
+  { "model": "api.gearsubtype", "pk": 1106, "fields": { "name": "HL Mackarel Scad", "gear_type": 11 } },
+
+ 
+  {
+    "model": "api.geartype",
+    "pk": 12,
+    "fields": { "name": "Inland Hook and Line", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1201, "fields": { "name": "HL Pole and Line", "gear_type": 12 } },
+  { "model": "api.gearsubtype", "pk": 1202, "fields": { "name": "HL Stationary Stick", "gear_type": 12 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 13,
+    "fields": { "name": "Inland Set Longline", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1301, "fields": { "name": "SL Bottom Set Longline", "gear_type": 13 } },
+  { "model": "api.gearsubtype", "pk": 1302, "fields": { "name": "SL Surface Set Longline", "gear_type": 13 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 14,
+    "fields": { "name": "Inland Gill Net", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1401, "fields": { "name": "GL Surface Set Longline", "gear_type": 14 } },
+  { "model": "api.gearsubtype", "pk": 1402, "fields": { "name": "GL Bottom Set Longline", "gear_type": 14 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 15,
+    "fields": { "name": "Inland Traps and Pots", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1501, "fields": { "name": "ITP Fish Pot", "gear_type": 15 } },
+  { "model": "api.gearsubtype", "pk": 1502, "fields": { "name": "ITP Fish Trap", "gear_type": 15 } },
+  { "model": "api.gearsubtype", "pk": 1503, "fields": { "name": "ITP Shrimp Trap", "gear_type": 15 } },
+  { "model": "api.gearsubtype", "pk": 1504, "fields": { "name": "ITP Bamboo Wire Trap", "gear_type": 15 } },
+  { "model": "api.gearsubtype", "pk": 1505, "fields": { "name": "ITP Flyke Net", "gear_type": 15 } },
+  { "model": "api.gearsubtype", "pk": 1506, "fields": { "name": "ITP Fish Corral (Baklad)", "gear_type": 15 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 16,
+    "fields": { "name": "Inland Falling Gear", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1601, "fields": { "name": "FG Cast Net", "gear_type": 16 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 17,
+    "fields": { "name": "Inland Scoop Net", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1701, "fields": { "name": "ISCN Man Push Net", "gear_type": 17 } },
+  { "model": "api.gearsubtype", "pk": 1702, "fields": { "name": "ISCN Scoop Net", "gear_type": 17 } },
+
+
+  {
+    "model": "api.geartype",
+    "pk": 18,
+    "fields": { "name": "Inland Miscellaneous Gear", "classification": 2 }
+  },
+  { "model": "api.gearsubtype", "pk": 1801, "fields": { "name": "IMG Spear", "gear_type": 18 } },
+  { "model": "api.gearsubtype", "pk": 1802, "fields": { "name": "IMG Spear Gun", "gear_type": 18 } },
+  { "model": "api.gearsubtype", "pk": 1803, "fields": { "name": "IMG Rake / Dredge", "gear_type": 18 } },
+  { "model": "api.gearsubtype", "pk": 1804, "fields": { "name": "IMG Fish Shelter", "gear_type": 18 } }
+]
