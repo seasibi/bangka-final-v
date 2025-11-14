@@ -17,12 +17,19 @@ const MABirukBilugTracking = () => {
         style={{ fontFamily: "Montserrat, sans-serif" }}
       >
         {/* Page Title */}
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="BirukBilug Tracking" />
+         <div className="flex justify-between items-center ml-2">
+          <div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-3" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              BIRUKBILUG TRACKER MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Monitor the boats as they move. Manage the trackers as well.
+            </p>
+          </div>
 
           
           <Button
-            onClick={() => navigate("/admin/TrackerManagement")}
+            onClick={() => navigate("/municipal_agriculturist/TrackerManagement")}
             className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
             style={{
               backgroundColor: "#3863CF",
@@ -36,7 +43,7 @@ const MABirukBilugTracking = () => {
 
         {/* Map Container */}
         <div className="relative w-full h-[50vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] xl:h-[70vh] 2xl:h-[76vh] rounded-xl px-3 overflow-hidden shadow-lg">
-          <MapView boundaryType={boundaryType}/>
+          <MapView boundaryType={boundaryType} />
         {/* Controls */}
           <div className="absolute top-4 right-4 z-20 bg-white/90 p-4 rounded-xl shadow-md w-64 space-y-3 pointer-events-auto">
             {/* Toggle Water/Land Boundaries */}

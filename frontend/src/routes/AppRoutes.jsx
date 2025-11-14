@@ -38,6 +38,10 @@ import MATrackerManagement from '../pages/municipal/TrackerManagement'
 import MABirukBilugTracking from '../pages/municipal/BirukBilugTracking'
 import MAReportGeneration from '../pages/municipal/ReportGeneration'
 import MAUtility from '../pages/municipal/Utitlity'
+import MAAddFisherfolk from '../pages/municipal/AddFisherfolk'
+import MAAddBoat from '../pages/municipal/AddBoat'
+import MATrackerView from '../pages/municipal/TrackerView'
+import MAEditBoat from '../pages/municipal/EditBoat'
 
 import AdminUserManagement from '../pages/admin/UserManagement'
 import AddBoat from '../pages/admin/AddBoat'
@@ -163,9 +167,14 @@ const AppRoutes = () => {
       <Route path="/municipal_agriculturist/*" element={<MunicipalLayout/>}>
         <Route path="dashboard" element={<PrivateRoute element={<MunicipalDashboard />} />} />
          <Route path="fisherfolkManagement" element={<PrivateRoute element={<MAFisherfolkManagement />} />} />
+         <Route path="fisherfolkManagement/add" element={<PrivateRoute element={<MAAddFisherfolk />} />} />
          <Route path="boatRegistryManagement" element={<PrivateRoute element={<MABoatRegistryManagement />} />} />
+          <Route path="boat-registry/add" element={<PrivateRoute element={<MAAddBoat />} />} />
+         <Route path="boat-registry/profile/:id" element={<PrivateRoute element={<BoatProfile editBasePath="/municipal_agriculturist" />} />} />
+         <Route path="boat-registry/edit/:id" element={<PrivateRoute element={<MAEditBoat />} />} />
          <Route path="birukbilugTracking" element={<PrivateRoute element={<MABirukBilugTracking />} />} />
          <Route path="TrackerManagement" element={<PrivateRoute element={<MATrackerManagement />} />} />
+         <Route path="TrackerManagement/view/:id" element={<PrivateRoute element={<MATrackerView />} />} />
          <Route path="notifications" element={<PrivateRoute element={<Notifications />} />} />
          <Route path="reportGeneration" element={<PrivateRoute element={<MAReportGeneration />} />} />
          <Route path="utility" element={<PrivateRoute element={<MAUtility />} />} />
