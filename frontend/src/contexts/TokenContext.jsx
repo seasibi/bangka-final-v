@@ -6,7 +6,10 @@ const TokenContext = createContext();
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutes in milliseconds
 
 export function TokenProvider({ children }) {
-  const { user, openSessionExpired } = useAuth();
+  // Safely get auth context (avoid crash if context isn't available yet)
+  const auth = (typeof useAuth === 'function') ? useAuth() : null;
+  const user = auth?.user || null;
+  const openSessionExpired = auth?.openSessionExpired || (() => {});
   const [lastActivity, setLastActivity] = useState(Date.now());
   const timersRef = useRef({});
 

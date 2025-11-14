@@ -5,7 +5,7 @@ from .views import (gps_data, gps_geojson, login_view, logout_view, refresh_toke
 from .test_beep_endpoint import test_beep_for_mfbr
 from rest_framework.routers import DefaultRouter
 from .views import BoatViewSet, FisherfolkViewSet, ProvincialAgriculturistViewSet, MunicipalAgriculturistViewSet, AddressViewSet, HouseholdViewSet, OrganizationViewSet, ContactsViewSet, ActivityLogViewSet, FisherfolkBoatViewSet, BirukbilugTrackerViewSet, DeviceTokenViewSet, MunicipalityViewSet, BarangayViewSet, BarangayVerifierViewSet, SignatoryViewSet
-from .views import BoatMeasurementsViewSet, BoatGearAssignmentViewSet, BoatGearTypeAssignmentViewSet, BoatGearSubtypeAssignmentViewSet, GearTypeViewSet, GearSubtypeViewSet, ImportFisherfolkExcelView, MunicipalityBoundaryViewSet, LandBoundaryViewSet
+from .views import BoatMeasurementsViewSet, BoatGearAssignmentViewSet, BoatGearTypeAssignmentViewSet, BoatGearSubtypeAssignmentViewSet, GearTypeViewSet, GearSubtypeViewSet, ImportFisherfolkExcelView, ImportBoatExcelView, MunicipalityBoundaryViewSet, LandBoundaryViewSet
 from .notification_views import BoundaryViolationNotificationViewSet
 from .backup_views import create_backup, restore_backup, backup_history
 from . import views_notification_enhancements as notif_views
@@ -60,6 +60,9 @@ urlpatterns = [
     
     # Import fisherfolk from Excel
     path('fisherfolk/import-excel/', ImportFisherfolkExcelView.as_view(), name='import_fisherfolk_excel'),
+
+    # Import boats from Excel
+    path('boats/import-excel/', ImportBoatExcelView.as_view(), name='import_boats_excel'),
 
     path('', include(router.urls)),
 

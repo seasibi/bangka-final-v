@@ -39,7 +39,7 @@ const AddFisherfolkForm = forwardRef(({
   setCurrentStep: setParentCurrentStep,
 }, ref) => {
   const { user } = useAuth();
-  const { municipalities, municipalityPrefixes, loading: municipalitiesLoading, refetch } = useMunicipalities();
+  const { municipalities, municipalityPrefixes, loading: municipalitiesLoading } = useMunicipalities();
   const [availableBarangays, setAvailableBarangays] = useState([]);
   const [contactBarangays, setContactBarangays] = useState([]);
   const [formData, setFormData] = useState(() => {
@@ -191,53 +191,16 @@ const AddFisherfolkForm = forwardRef(({
     }
   }));
 
-  // Refetch municipalities on mount to ensure fresh data
-  useEffect(() => {
-    if (refetch) {
-      refetch();
-    }
-  }, []);
-
-  // Validate and reset municipality if it's no longer in the list
-  useEffect(() => {
-    if (!municipalitiesLoading && formData.municipality) {
-      const muniExists = municipalities.some(m => m.name === formData.municipality);
-      if (!muniExists) {
-        console.log('[WARNING] Municipality not found in list, clearing:', formData.municipality);
-        setFormData(prev => ({ ...prev, municipality: '', barangay: '', registration_number: '' }));
-      }
-    }
-  }, [municipalities, municipalitiesLoading, formData.municipality]);
-
   // Auto-populate municipality for Municipal Agriculturist users
   useEffect(() => {
-    if (user?.user_role === 'municipal_agriculturist' && user?.municipality && !initialData && !municipalitiesLoading) {
-      // Check if the user's municipality exists in the list
-      const muniExists = municipalities.some(m => m.name === user.municipality);
-      if (muniExists) {
-        console.log('[AUTO-POPULATE] Setting municipality to:', user.municipality);
-        setFormData((prev) => ({
-          ...prev,
-          municipality: user.municipality,
-        }));
-      } else {
-        console.warn('[AUTO-POPULATE] User municipality not found in list:', user.municipality);
-        console.warn('[AUTO-POPULATE] Available municipalities:', municipalities.map(m => m.name));
-        // Try to find a close match (case-insensitive partial match)
-        const closeMatch = municipalities.find(m => 
-          m.name.toLowerCase().includes(user.municipality.toLowerCase()) ||
-          user.municipality.toLowerCase().includes(m.name.toLowerCase())
-        );
-        if (closeMatch) {
-          console.log('[AUTO-POPULATE] Using close match:', closeMatch.name);
-          setFormData((prev) => ({
-            ...prev,
-            municipality: closeMatch.name,
-          }));
-        }
-      }
+    if (user?.user_role === 'municipal_agriculturist' && user?.municipality && !initialData) {
+      console.log('[AUTO-POPULATE] Setting municipality to:', user.municipality);
+      setFormData((prev) => ({
+        ...prev,
+        municipality: user.municipality,
+      }));
     }
-  }, [user, initialData, municipalities, municipalitiesLoading]);
+  }, [user, initialData]);
 
   useEffect(() => {
     console.log('[DEBUG] Municipality changed in useEffect:', formData.municipality);
@@ -3619,6 +3582,7 @@ const AddFisherfolkForm = forwardRef(({
         onClose={() => setAlertModal({ isOpen: false, title: '', message: '' })}
         title={alertModal.title}
         message={alertModal.message}
+        variant="danger"
       />
 
       <ConfirmModal
@@ -3627,6 +3591,7 @@ const AddFisherfolkForm = forwardRef(({
         onConfirm={handleConfirmSubmitWithClear}
         title="Confirm Fisherfolk Creation"
         message="Are you sure you want to create this fisherfolk?"
+        variant="primary"
       />
     </>
   );

@@ -72,8 +72,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   const [errors, setErrors] = useState({});
   const [boatNameError, setBoatNameError] = useState("");
   const [isCheckingBoatName, setIsCheckingBoatName] = useState(false);
-  const [mfbrCheckInProgress, setMfbrCheckInProgress] = useState(false);
-  const mfbrCheckTimeoutRef = useRef(null);
+  const [mfbrCheck, setMfbrCheck] = useState({ status: "idle" }); // idle|checking|available|taken
 
   // When the parent page confirms Another + picks reuse/clear, apply here
   useEffect(() => {
@@ -378,41 +377,31 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     }
   }, [formData.mfbr_number, mfbrMunicipality, mfbrNumber]);
 
-  // Inline duplicate check for MFBR (debounced)
+  // Debounced MFBR uniqueness check
   useEffect(() => {
-    if (!formData.mfbr_number) return;
-    if (mfbrCheckTimeoutRef.current) clearTimeout(mfbrCheckTimeoutRef.current);
-
-    const full = /^LU-[A-Z]{3}-\d{3}$/.test(formData.mfbr_number);
+    let timer;
+    const code = mfbrMunicipality ? municipalityCodes[mfbrMunicipality] : "";
+    const padded = (mfbrNumber || "").padStart(3, "0");
+    const full = code && mfbrNumber ? `LU-${code}-${padded}` : null;
     if (!full) {
-      setErrors((prev) => ({ ...prev, mfbr_number: 'Complete MFBR with 3-digit sequence.' }));
+      setMfbrCheck({ status: "idle" });
       return;
     }
-
-    setMfbrCheckInProgress(true);
-    mfbrCheckTimeoutRef.current = setTimeout(async () => {
+    setMfbrCheck({ status: "checking" });
+    timer = setTimeout(async () => {
       try {
-        await getBoatById(formData.mfbr_number);
-        setErrors((prev) => ({ ...prev, mfbr_number: 'This MFBR number already exists.' }));
-      } catch (err) {
-        if (err?.response?.status === 404) {
-          setErrors((prev) => {
-            const cp = { ...prev };
-            if (cp.mfbr_number && (cp.mfbr_number.startsWith('This MFBR number') || cp.mfbr_number.startsWith('Complete MFBR'))) {
-              delete cp.mfbr_number;
-            }
-            return cp;
-          });
+        await getBoatById(full);
+        setMfbrCheck({ status: "taken" });
+      } catch (e) {
+        if (e?.response?.status === 404) {
+          setMfbrCheck({ status: "available" });
+        } else {
+          setMfbrCheck({ status: "idle" });
         }
-      } finally {
-        setMfbrCheckInProgress(false);
       }
-    }, 500);
-
-    return () => {
-      if (mfbrCheckTimeoutRef.current) clearTimeout(mfbrCheckTimeoutRef.current);
-    };
-  }, [formData.mfbr_number]);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [mfbrMunicipality, mfbrNumber]);
 
   // Fetch signatories when municipality is available (for step 2 confirmation)
   useEffect(() => {
@@ -538,10 +527,6 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (errors.mfbr_number) {
-      setAlertModal({ isOpen: true, title: 'Duplicate MFBR', message: errors.mfbr_number });
-      return;
-    }
     if (currentStep < steps.length - 1) {
       handleNext();
       return;
@@ -1172,11 +1157,17 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       required
                     />
+                    {mfbrCheck.status === "checking" && (
+                      <span className="mt-1 text-xs text-gray-500 block">Checking availability…</span>
+                    )}
+                    {mfbrCheck.status === "available" && (
+                      <span className="mt-1 text-xs text-green-600 block">Available</span>
+                    )}
+                    {mfbrCheck.status === "taken" && (
+                      <span className="mt-1 text-xs text-red-600 block">Already taken</span>
+                    )}
                     {errors.mfbr_number && (
                       <span className="mt-1 text-xs text-red-600 block">{errors.mfbr_number}</span>
-                    )}
-                    {mfbrCheckInProgress && !errors.mfbr_number && (
-                      <span className="mt-1 text-xs text-gray-500 block">Checking availability...</span>
                     )}
                   </div>
                 </div>
@@ -1601,8 +1592,9 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
             </h2>
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">
-                Boat Photo (owner beside the boat) <span className="text-red-500">*</span>
+                Upload Photo <span className="text-red-500">*</span>
               </label>
+              <p className="text-xs text-gray-500">Suggested: clear image of the boat with the owner beside it.</p>
               <div className="relative mt-1">
                 <input
                   type="file"
@@ -1617,15 +1609,12 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                   required={!formData.boat_image}
                 />
               </div>
-              <p className="text-xs text-gray-500">
-                Please upload a clear image of the boat with the owner standing beside it.
-              </p>
 
               {preview && (
                 <div className="mt-3">
                   <img
                     src={preview}
-                    alt="Boat photo preview"
+                    alt="Preview"
                     className="w-40 h-40 object-cover rounded-xl border border-gray-300 shadow-md"
                   />
                 </div>
@@ -6077,8 +6066,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         <div className="flex justify-end space-x-3">
           <button
             type="submit"
-            disabled={!!errors.mfbr_number || mfbrCheckInProgress}
-            className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 ml-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 ml-auto"
           >
             {currentStep === 0 ? "Next" : currentStep === 1 ? "Next" : "Submit"}
           </button>
@@ -6091,6 +6079,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         onClose={() => setAlertModal({ isOpen: false, title: "", message: "" })}
         title={alertModal.title}
         message={alertModal.message}
+        variant="warning"
       />
 
       {/* Confirm Modal */}
@@ -6100,6 +6089,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         onConfirm={handleConfirmSubmit}
         title="Confirm Boat Registration"
         message="Are you sure you want to register this boat?"
+        variant="primary"
       />
 
       {/* Error Modal */}
@@ -6108,6 +6098,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         onClose={() => setErrorModal({ isOpen: false, message: "" })}
         title="Selection Required"
         message={errorModal.message}
+        variant="danger"
       />
     </form>
   );

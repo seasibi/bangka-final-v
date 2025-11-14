@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChevronLeft } from "react-icons/fa";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import PageTitle from "../PageTitle";
@@ -106,6 +105,7 @@ const ActivityLogReport = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const pageOptions = [25, 52, 100];
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchActivityLogs = async () => {
     setLoading(true);
@@ -302,48 +302,44 @@ const ActivityLogReport = () => {
     return timestamp >= startDate && timestamp <= endDate;
   });
 
-  const total = filteredActivityLogs.length;
+  const searchedLogs = filteredActivityLogs.filter((log) => {
+    const userStr = (log.user || "").toString().toLowerCase();
+    const actionStr = (log.action || "").toString().toLowerCase();
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return userStr.includes(q) || actionStr.includes(q);
+  });
+
+  const total = searchedLogs.length;
   const totalPagesUI = Math.max(1, Math.ceil(total / pageSize));
   const currentPageUI = Math.min(page, totalPagesUI);
   const startIdxUI = (currentPageUI - 1) * pageSize;
-  const paginatedLogs = filteredActivityLogs.slice(startIdxUI, startIdxUI + pageSize);
+  const paginatedLogs = searchedLogs.slice(startIdxUI, startIdxUI + pageSize);
   const thSticky = { ...styles.th, position: 'sticky', top: 0, zIndex: 10, backgroundColor: styles.th.backgroundColor || '#f1f5f9' };
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', paddingLeft: '2.5rem', paddingTop: '1rem' }}>
-        <button
-          type="button"
-          onClick={() => navigate('/admin/utility')}
-          style={{
-            padding: '0.5rem',
-            backgroundColor: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#9ca3af',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '0.5rem',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.color = '#4b5563';
-            e.target.style.backgroundColor = '#f3f4f6';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.color = '#9ca3af';
-            e.target.style.backgroundColor = 'transparent';
-          }}
-        >
-          <FaChevronLeft size={20} />
-        </button>
-        <h1 className="text-2xl font-semibold font-montserrat leading-tight">Activity Log Report</h1>
-      </div>
+      <div className="px-6 pt-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate('/admin/utility')}
+            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="Back to utility"
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <PageTitle value="ACTIVITY LOGS" />
+            <p className="text-sm text-gray-600">View the activities done by users</p>
+          </div>
+        </div>
 
-      <div style={{ padding: '2rem', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
+        <div className="pl-10 pr-10" style={{ backgroundColor: '#f9fafb', minHeight: '100vh' }}>
       <div style={styles.flexRow}>
-        <div>
+        <div className="justify-right">
           <label style={styles.label}>Start Date:</label>
           <input
             type="date"
@@ -382,7 +378,17 @@ const ActivityLogReport = () => {
                     <option key={opt} value={opt}>{opt}</option>
                   ))}
                 </select>
-                <div style={{ fontSize: 13, color: '#64748b' }}>Total: {filteredActivityLogs.length}</div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>Total: {searchedLogs.length}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
+                  <label style={{ fontSize: 14, color: '#334155' }}>Search:</label>
+                  <input
+                    type="text"
+                    placeholder="User or Action"
+                    style={{ ...styles.input, padding: '6px 8px' }}
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+                  />
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPageUI <= 1} style={{ padding: '6px 10px' }}>Prev</button>
@@ -426,6 +432,9 @@ const ActivityLogReport = () => {
         </>
       )}
       </div>
+      </div>
+
+      
     </>
   );
 };

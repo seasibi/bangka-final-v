@@ -33,7 +33,6 @@ const TrackerDonutStat = () => {
     labels: ["Assigned", "Unassigned"],
     colors: blueShades.slice(0, 2),
     legend: { position: "bottom" },
-    title: { text: "Tracker Assignment" },
     dataLabels: { enabled: true },
     plotOptions: {
       pie: {
@@ -67,9 +66,6 @@ const TrackerDonutStat = () => {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="flex items-start mb-2">
-        <h3 className="text-lg font-semibold text-gray-900">Tracker Assignment</h3>
-      </div>
       <div className="flex flex-col items-center justify-center flex-1">
         {loading ? <div>Loading...</div> : <Chart options={options} series={series} type="donut" height={250} />}
       </div>
