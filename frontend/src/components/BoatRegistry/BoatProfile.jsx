@@ -41,7 +41,7 @@ const Info = ({ label, value }) => (
   </div>
 );
 
-const BoatProfile = () => {
+const BoatProfile = ({ editBasePath = '/admin' }) => {
   const { id } = useParams();
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -434,7 +434,7 @@ const BoatProfile = () => {
   };
 
   const handleEditConfirm = () => {
-    navigate(`/admin/boat-registry/edit/${boat.mfbr_number}`);
+    navigate(`${editBasePath}/boat-registry/edit/${boat.mfbr_number}`);
   };
 
   if (loading || !boat) return <Loader />;
