@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChevronLeft } from "react-icons/fa";
+import PageHeader from "../../components/PageHeader";
 import axios from "axios";
 import ConfirmModal from "../../components/ConfirmModal";
 import SuccessModal from "../../components/SuccessModal";
@@ -55,19 +55,11 @@ const BoatExcelImport = () => {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex items-center gap-4 mb-6">
-            <button
-              type="button"
-              onClick={() => navigate('/admin/utility')}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
-            >
-              <FaChevronLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Import Boats from Excel</h2>
-              <p className="text-gray-600">Upload an Excel file to import multiple boat records</p>
-            </div>
-          </div>
+          <PageHeader
+            title="Import Boats from Excel"
+            subtitle="Upload an Excel file to import multiple boat records"
+            backTo="/admin/utility"
+          />
           
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>

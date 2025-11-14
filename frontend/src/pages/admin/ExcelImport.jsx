@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChevronLeft } from "react-icons/fa";
 import axios from "axios";
+import PageTitle from '../../components/PageTitle';
 import ConfirmModal from "../../components/ConfirmModal";
 import SuccessModal from "../../components/SuccessModal";
 
@@ -40,7 +40,7 @@ const ExcelImport = () => {
       if (importType === "boat") {
         endpoint = `${API_BASE}/api/boats/import-excel/`;
       } else {
-        endpoint = "/api/fisherfolk/import-excel/";
+        endpoint = `${API_BASE}/api/fisherfolk/import-excel/`;
       }
 
       const res = await axios.post(endpoint, formData, {
@@ -79,22 +79,26 @@ const ExcelImport = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-6" style={{ fontFamily: 'Montserrat, sans-serif' }} >
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex items-center gap-4 mb-8">
-            <button
-              type="button"
-              onClick={() => navigate('/admin/utility')}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
-            >
-              <FaChevronLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">{getTitle()}</h2>
-              <p className="text-gray-600">{getDescription()}</p>
-            </div>
+
+            {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate('/admin/utility')}
+            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="Back to utility"
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <PageTitle value="IMPORT EXCEL FILES" />
+            <p className="text-sm text-gray-600">Import Excel files to add multiple data at once.</p>
           </div>
+        </div>
 
           {/* Import Type Selector */}
           <div className="mb-8 p-4 bg-gray-50 rounded-lg border border-gray-200">

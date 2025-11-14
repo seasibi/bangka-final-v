@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { MapContainer, TileLayer, GeoJSON, useMap, Marker, Popup } from "react-leaflet";
 import { useNavigate } from "react-router-dom";
-import { FaChevronLeft } from "react-icons/fa";
 import "leaflet/dist/leaflet.css";
 import PageTitle from "../../components/PageTitle";
 import ConfirmModal from "../../components/ConfirmModal";
@@ -159,8 +158,14 @@ const BoundaryEditor = () => {
   }, [boundaries]);
 
   const availableMunicipalities = React.useMemo(() => {
-    return (municipalities || []).filter(m => !assignedMunicipalityIds.has(m.municipality_id));
-  }, [municipalities, assignedMunicipalityIds]);
+    const base = (municipalities || []).filter(m => !assignedMunicipalityIds.has(m.municipality_id));
+    const viewingMode = pendingMode ?? mode;
+    if (viewingMode === 'water') {
+      // Only coastal municipalities (computed or manual flag)
+      return base.filter(m => m.is_coastal === true || m.is_coastal_manual === true);
+    }
+    return base; // land: all municipalities
+  }, [municipalities, assignedMunicipalityIds, mode, pendingMode]);
 
   const transformBoundaries = (data) => ({
     type: "FeatureCollection",
@@ -495,17 +500,24 @@ const BoundaryEditor = () => {
 
   return (
     <div className="h-full bg-gray-50 font-montserrat" style={{ fontFamily: "Montserrat, sans-serif" }}>
-      {/* Page Title */}
-      <div className="px-6 py-6 bg-white rounded-b-xl flex items-center gap-4">
-        <button
-          type="button"
-          onClick={() => navigate('/admin/utility')}
-          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-200"
-        >
-          <FaChevronLeft className="w-5 h-5" />
-        </button>
-        <PageTitle value="Boundary Editor" />
-      </div>
+            <div className="h-full px-6 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+
+      {/* Header */}
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate('/admin/utility')}
+            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="Back to utility"
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <div>
+            <PageTitle value="BOUNDARY MANAGEMENT" />
+            <p className="text-sm text-gray-600">Manage the boundaries per municipalities of La Union</p>
+          </div>
+        </div>
 
       <div className="flex gap-6 h-[calc(100vh-200px)] p-6">
         {/* Left Panel - match map height */}
@@ -561,7 +573,7 @@ const BoundaryEditor = () => {
           {!showAddMunicipality && (
             <div className="bg-white rounded-xl shadow-md p-5 mb-4">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Select {(pendingMode ?? mode) === "water" ? "Municipality" : "Municipality"}
+                Select {(pendingMode ?? mode) === "water" ? "Water Municipality" : "Land Municipality"}
               </label>
               <select
                 value={selectedIndex ?? ""}
@@ -571,7 +583,7 @@ const BoundaryEditor = () => {
                 }}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
               >
-                <option value="">-- Choose a {(pendingMode ?? mode) === "water" ? "municipality" : "land boundary"} --</option>
+                <option value="">-- Choose a {(pendingMode ?? mode) === "water" ? "water municipality" : "land boundary"} --</option>
                 {boundaries.features.map((feature, index) => (
                   <option key={index} value={index}>
                     {feature.properties?.name || `Boundary ${index+1}`}
@@ -586,7 +598,7 @@ const BoundaryEditor = () => {
           {showAddMunicipality && (
             <div className="bg-white rounded-xl shadow-md p-5 space-y-4 flex-1 overflow-y-auto">
               <div>
-                <label className="block text-sm font-medium text-gray-600">Municipality</label>
+                <label className="block text-sm font-medium text-gray-600">{(pendingMode ?? mode) === 'water' ? 'Coastal Municipality' : 'Municipality'}</label>
                 <select
                   value={newMunicipality.municipality ?? ""}
                   onChange={(e) => {
@@ -601,7 +613,7 @@ const BoundaryEditor = () => {
                   className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
                 >
                   <option value="" disabled>
-                    {municipalitiesLoading ? "Loading municipalities..." : "Select Municipality"}
+                    {municipalitiesLoading ? "Loading municipalities..." : ((pendingMode ?? mode) === 'water' ? 'Select Coastal Municipality' : 'Select Municipality')}
                   </option>
                   {municipalitiesError && (
                     <option value="" disabled>{municipalitiesError}</option>
@@ -937,6 +949,7 @@ const BoundaryEditor = () => {
       </Marker>
     )}
   </MapContainer>
+</div>
 </div>
       </div>
 

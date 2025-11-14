@@ -11,7 +11,7 @@ export const municipalityPrefixes = {
   Burgos: "BRG",
   Caba: "CAB",
   "San Fernando": "SFN",
-  "City of San Fernando": "CSF",
+  "City Of San Fernando": "CSF",
   Luna: "LUN",
   Naguilian: "NAG",
   Pugo: "PUG",

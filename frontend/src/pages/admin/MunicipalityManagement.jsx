@@ -439,7 +439,7 @@ const MunicipalityManagement = () => {
             </svg>
           </button>
           <div>
-            <PageTitle value="Municipality Management" />
+            <PageTitle value="MUNICIPALITY MANAGEMENT" />
             <p className="text-sm text-gray-600">Manage the municipalities of La Union</p>
           </div>
         </div>

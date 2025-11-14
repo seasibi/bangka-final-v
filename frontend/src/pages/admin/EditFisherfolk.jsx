@@ -14,6 +14,8 @@ import {
   organizationOptions,
 } from "../../components/FisherfolkManagement/fisherfolkOptions";
 import Loader from "../../components/Loader";
+import { getBarangayVerifiers } from "../../services/barangayVerifierService";
+import { getSignatories } from "../../services/signatoriesService";
 
 const EditFisherfolk = () => {
   const navigate = useNavigate();
@@ -100,6 +102,14 @@ const EditFisherfolk = () => {
     contact_street: "",
   });
 
+  const [municipalities, setMunicipalities] = useState([]);
+  const [selectedMunicipality, setSelectedMunicipality] = useState(null);
+  const [barangaysAddress, setBarangaysAddress] = useState([]);
+  const [barangaysContact, setBarangaysContact] = useState([]);
+  const [barangayVerifier, setBarangayVerifier] = useState(null);
+  const [verifiersByPosition, setVerifiersByPosition] = useState({});
+  const [signatories, setSignatories] = useState({ municipal: null, mayor: null });
+
   const InfoField = ({ label, value }) => (
     <div>
       <p className="text-gray-600 text-sm">{label}</p>
@@ -113,6 +123,211 @@ const EditFisherfolk = () => {
     fetchFisherfolkData();
   }, [id]);
 
+  useEffect(() => {
+    fetchMunicipalities();
+  }, []);
+
+  // Keep selectedMunicipality in sync with formData.municipality and fetched list
+  useEffect(() => {
+    if (!formData?.municipality || !municipalities?.length) {
+      setSelectedMunicipality(null);
+      return;
+    }
+    const target = String(formData.municipality).trim().toLowerCase();
+    // Try direct match (case-insensitive)
+    let match = municipalities.find(
+      (m) => String(m.name).trim().toLowerCase() === target
+    );
+    // Handle common aliases
+    if (!match) {
+      const variants = [];
+      if (target.includes("sto.")) variants.push(target.replace("sto.", "santo"));
+      if (target.includes("santo")) variants.push(target.replace("santo", "sto."));
+      if (target.includes("city of san fernando")) variants.push("san fernando");
+      if (target === "san fernando") variants.push("city of san fernando");
+      for (const v of variants) {
+        match = municipalities.find(
+          (m) => String(m.name).trim().toLowerCase() === v
+        );
+        if (match) break;
+      }
+    }
+    setSelectedMunicipality(match || null);
+  }, [formData.municipality, municipalities]);
+
+  // Helper to find municipality object by name (case-insensitive with aliases)
+  const findMunicipalityByName = (name) => {
+    if (!name || !municipalities.length) return null;
+    const target = String(name).trim().toLowerCase();
+    let m = municipalities.find((x) => String(x.name).trim().toLowerCase() === target);
+    if (!m) {
+      const variants = [];
+      if (target.includes("sto.")) variants.push(target.replace("sto.", "santo"));
+      if (target.includes("santo")) variants.push(target.replace("santo", "sto."));
+      if (target.includes("city of san fernando")) variants.push("san fernando");
+      if (target === "san fernando") variants.push("city of san fernando");
+      for (const v of variants) {
+        m = municipalities.find((x) => String(x.name).trim().toLowerCase() === v);
+        if (m) break;
+      }
+    }
+    return m || null;
+  };
+
+  // Fetch barangays for current selectedMunicipality (address section)
+  useEffect(() => {
+    const load = async () => {
+      if (!selectedMunicipality?.municipality_id) {
+        setBarangaysAddress([]);
+        return;
+      }
+      try {
+        const token = getAccessToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(
+          `http://localhost:8000/api/barangays/?municipality_id=${selectedMunicipality.municipality_id}`,
+          { withCredentials: true, headers }
+        );
+        const list = Array.isArray(res.data) ? res.data : [];
+        // Expect each item to have name
+        setBarangaysAddress(list.map((b) => b.name));
+      } catch (e) {
+        console.error("Failed to fetch barangays (address)", e);
+        setBarangaysAddress([]);
+      }
+    };
+    load();
+  }, [selectedMunicipality]);
+
+  // Fetch barangays for contact municipality
+  useEffect(() => {
+    const load = async () => {
+      const m = findMunicipalityByName(formData.contact_municipality);
+      if (!m?.municipality_id) {
+        setBarangaysContact([]);
+        return;
+      }
+      try {
+        const token = getAccessToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const res = await axios.get(
+          `http://localhost:8000/api/barangays/?municipality_id=${m.municipality_id}`,
+          { withCredentials: true, headers }
+        );
+        const list = Array.isArray(res.data) ? res.data : [];
+        setBarangaysContact(list.map((b) => b.name));
+      } catch (e) {
+        console.error("Failed to fetch barangays (contact)", e);
+        setBarangaysContact([]);
+      }
+    };
+    load();
+  }, [formData.contact_municipality, municipalities]);
+
+  // Auto-default region/province if empty
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      region: prev.region || "Region 1",
+      province: prev.province || "La Union",
+      fishing_ground: prev.municipality || prev.fishing_ground,
+      fma_number: prev.fma_number || "FMA-6",
+    }));
+  }, []);
+
+  // Keep derived fields in sync when municipality or barangay/position changes
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      fishing_ground: prev.municipality,
+    }));
+  }, [formData.municipality, municipalities]);
+
+  // Fetch barangay verifiers based on municipality & barangay
+  useEffect(() => {
+    const fetchVerifiers = async () => {
+      try {
+        if (!formData.municipality || !formData.barangay) {
+          setBarangayVerifier(null);
+          setVerifiersByPosition({});
+          setFormData((prev) => ({ ...prev, barangay_verifier: "" }));
+          return;
+        }
+
+        const muni = findMunicipalityByName(formData.municipality);
+        if (!muni?.municipality_id) {
+          setBarangayVerifier(null);
+          setVerifiersByPosition({});
+          setFormData((prev) => ({ ...prev, barangay_verifier: "" }));
+          return;
+        }
+
+        const token = getAccessToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        // Find barangay object by name via barangaysAddress we loaded already; fallback to service
+        let verifiers = await getBarangayVerifiers({
+          municipality_id: muni.municipality_id,
+          barangay_name: formData.barangay,
+          is_active: true,
+          headers,
+        });
+        verifiers = Array.isArray(verifiers) ? verifiers : [];
+        const map = {};
+        verifiers.forEach((v) => {
+          map[v.position] = v;
+        });
+        setVerifiersByPosition(map);
+        const captain = map["Barangay Captain"];
+        setBarangayVerifier(captain || null);
+
+        // If a position is selected, auto-fill the verifier name
+        if (formData.position && map[formData.position]) {
+          const p = map[formData.position];
+          const full = `${p.first_name} ${p.middle_name ? p.middle_name + " " : ""}${p.last_name}`.trim();
+          setFormData((prev) => ({ ...prev, barangay_verifier: full }));
+        } else if (!formData.position && captain) {
+          const full = `${captain.first_name} ${captain.middle_name ? captain.middle_name + " " : ""}${captain.last_name}`.trim();
+          setFormData((prev) => ({ ...prev, barangay_verifier: full, position: "Barangay Captain" }));
+        }
+      } catch (error) {
+        console.error("Error fetching verifier and signatories:", error);
+        setBarangayVerifier(null);
+        setVerifiersByPosition({});
+        setFormData((prev) => ({ ...prev, barangay_verifier: "" }));
+      }
+    };
+    fetchVerifiers();
+  }, [formData.municipality, formData.barangay, municipalities]);
+
+  // Fetch signatories (Municipal Agriculturist and Mayor) based on municipality only
+  useEffect(() => {
+    const fetchMunicipalSignatories = async () => {
+      try {
+        if (!formData.municipality) {
+          setSignatories({ municipal: null, mayor: null });
+          return;
+        }
+        const muni = findMunicipalityByName(formData.municipality);
+        if (!muni?.municipality_id) {
+          setSignatories({ municipal: null, mayor: null });
+          return;
+        }
+        const token = getAccessToken();
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const data = await getSignatories({ municipality_id: muni.municipality_id, is_active: true });
+        const list = Array.isArray(data) ? data : (data?.results || []);
+        const municipal = list.find((s) => s.position === 'Municipal Agriculturist') || null;
+        const mayor = list.find((s) => s.position === 'Mayor') || null;
+        setSignatories({ municipal, mayor });
+      } catch (err) {
+        console.error('Failed to fetch municipal signatories', err);
+        setSignatories({ municipal: null, mayor: null });
+      }
+    };
+    fetchMunicipalSignatories();
+  }, [formData.municipality]);
+
   // Helper to get access token from cookie or localStorage
   // Removed getAccessToken. Authentication will use cookies only.
   // Helper to get access token from localStorage (if available)
@@ -120,6 +335,25 @@ const EditFisherfolk = () => {
     const token = localStorage.getItem("access_token");
     console.log("[Token Check] LocalStorage access_token:", token);
     return token;
+  };
+
+  // Fetch municipalities from backend for dynamic options
+  const fetchMunicipalities = async () => {
+    try {
+      const token = getAccessToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.get("http://localhost:8000/api/municipalities/", {
+        withCredentials: true,
+        headers,
+      });
+      const list = Array.isArray(res.data) ? res.data : [];
+      // Prefer active municipalities first (keep all for edit compatibility)
+      const sorted = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+      setMunicipalities(sorted);
+    } catch (e) {
+      console.error("Failed to fetch municipalities", e);
+      setMunicipalities([]);
+    }
   };
 
   const [contact_contactnoError, setContact_contactnoError] = useState("");
@@ -292,7 +526,12 @@ const handlePictureChange = (e) => {
           "Contact number must start with 9 and be 10 digits long."
         );
       } else {
-        setContact_contactnoError("");
+        // Additional rule: must differ from fisherfolk contact number
+        if (value === (formData.contact_number || "")) {
+          setContact_contactnoError("Contact person's number must be different from fisherfolk contact number.");
+        } else {
+          setContact_contactnoError("");
+        }
       }
     }
 
@@ -353,6 +592,28 @@ const handlePictureChange = (e) => {
       return;
     }
 
+    // Auto-calculate number of children when in/out school changes
+    if (name === "no_in_school" || name === "no_out_school") {
+      const inSchool = name === "no_in_school" ? Number(value || 0) : Number(formData.no_in_school || 0);
+      const outSchool = name === "no_out_school" ? Number(value || 0) : Number(formData.no_out_school || 0);
+      const children = inSchool + outSchool;
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        no_children: children,
+      }));
+      return;
+    }
+
+    // Residency years should not exceed age
+    if (name === "residency_years") {
+      const yrs = Number(value || 0);
+      const age = Number(formData.age || 0);
+      const capped = Math.max(0, Math.min(yrs, age || yrs));
+      setFormData((prev) => ({ ...prev, residency_years: capped }));
+      return;
+    }
+
     setFormData((prevState) => ({
       ...prevState,
       [name]: value,
@@ -361,6 +622,11 @@ const handlePictureChange = (e) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Block if contact person's number equals fisherfolk's number
+    if ((formData.contact_contactno || "") === (formData.contact_number || "")) {
+      setContact_contactnoError("Contact person's number must be different from fisherfolk contact number.");
+      return;
+    }
     setIsSubmitModalOpen(true);
   };
 
@@ -448,7 +714,10 @@ const handleConfirmSubmit = async () => {
         : org.org_name;
       if (orgNameToSend) formDataToSend.append(`organizations[${idx}][org_name]`, orgNameToSend);
       if (org.member_since) formDataToSend.append(`organizations[${idx}][member_since]`, org.member_since);
-      if (org.org_position) formDataToSend.append(`organizations[${idx}][org_position]`, org.org_position);
+      const positionToSend = org.org_position === "Others" && org.custom_position
+        ? org.custom_position
+        : org.org_position;
+      if (positionToSend) formDataToSend.append(`organizations[${idx}][org_position]`, positionToSend);
     });
 
     // Append array fields (like other_source_livelihood)
@@ -548,12 +817,12 @@ const handleConfirmSubmit = async () => {
         </button>
         <div className="grid grid-cols-1 grid-rows-2 ml-4">
           <h1 className="text-3xl font-bold text-gray-900">
-            {currentStep === 1 ? "Edit User Profile" : "Confirm User Details"}
+            {currentStep === 1 ? "Edit Fisherfolk Profile" : "Confirm Fisherfolk Details"}
           </h1>
           <p className="text-base text-gray-700">
             {currentStep === 1
-              ? "Edit user account personal details."
-              : "Review the details before updating this user."}
+              ? "Edit fisherfolk personal details."
+              : "Review the details before updating this fisherfolk."}
           </p>
         </div>
       </div>
@@ -586,6 +855,7 @@ const handleConfirmSubmit = async () => {
                     ...prev,
                     municipality: val,
                     barangay: "",
+                    fishing_ground: val,
                   }));
                 }}
               >
@@ -606,19 +876,17 @@ const handleConfirmSubmit = async () => {
                   </Listbox.Button>
 
                   <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    {Object.keys(municipalityPrefixes).map((mun) => (
+                    {municipalities.map((m) => (
                       <Listbox.Option
-                        key={mun}
-                        value={mun}
+                        key={m.municipality_id}
+                        value={m.name}
                         className={({ active }) =>
                           `relative cursor-default select-none py-2 pl-10 pr-4 ${
-                            active
-                              ? "bg-blue-100 text-blue-900"
-                              : "text-gray-900"
+                            active ? "bg-blue-100 text-blue-900" : "text-gray-900"
                           }`
                         }
                       >
-                        {mun}
+                        {m.name}
                       </Listbox.Option>
                     ))}
                   </Listbox.Options>
@@ -628,11 +896,11 @@ const handleConfirmSubmit = async () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Registration Number
+                Registration Number <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={`${municipalityPrefixes[formData.municipality] || "XXX"}-${formData.registration_number}`}
+                value={`${(selectedMunicipality?.prefix) || (municipalityPrefixes[formData.municipality]) || "XXX"}-${formData.registration_number}`}
                 readOnly
                 className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500 font-mono"
               />
@@ -667,7 +935,7 @@ const handleConfirmSubmit = async () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                First Name
+                First Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -681,7 +949,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Middle Name
+                Middle Name 
               </label>
               <input
                 type="text"
@@ -694,7 +962,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Last Name
+                Last Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -721,7 +989,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Birth Date
+                Birth Date <span className="text-red-500">*</span>
               </label>
               <input
                 type="date"
@@ -747,7 +1015,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Birth Place
+                Birth Place <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -761,7 +1029,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Civil Status
+                Civil Status <span className="text-red-500">*</span>
               </label>
               <select
                 name="civil_status"
@@ -778,7 +1046,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Sex
+                Sex <span className="text-red-500">*</span>
               </label>
               <div className="flex gap-4 mt-3 ml-7">
                 <label className="flex items-center mr-15">
@@ -809,7 +1077,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Contact Number
+                Contact Number <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center">
                 <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-900 text-sm">
@@ -831,7 +1099,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Nationality
+                Nationality <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -844,7 +1112,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Fisherfolk Status
+                Fisherfolk Status <span className="text-red-500">*</span>
               </label>
               <div className="flex gap-4 mt-3 ml-7">
                 <label className="flex items-center mr-6">
@@ -873,7 +1141,7 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Mother's Maiden Name
+                Mother's Maiden Name 
               </label>
               <input
                 type="text"
@@ -886,33 +1154,33 @@ const handleConfirmSubmit = async () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Fishing Ground
+                Fishing Ground <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="fishing_ground"
-                value={formData.fishing_ground}
-                onChange={handleInputChange}
+                value={formData.municipality}
+                readOnly
                 placeholder="Fishing Ground"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                FMA Number
+                FMA Number <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="fma_number"
-                value={formData.fma_number}
-                onChange={handleInputChange}
+                value={formData.fma_number || "FMA-6"}
+                readOnly
                 placeholder="FMA Number"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Religion
+                Religion <span className="text-red-500">*</span>
               </label>
               <select
                 name="religion"
@@ -944,14 +1212,14 @@ const handleConfirmSubmit = async () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Region
+                Region <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 name="region"
-                value={formData.region}
-                onChange={handleInputChange}
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
+                value={formData.region || "Region 1"}
+                readOnly
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
               />
             </div>
             <div>
@@ -961,9 +1229,9 @@ const handleConfirmSubmit = async () => {
               <input
                 type="text"
                 name="province"
-                value={formData.province}
-                onChange={handleInputChange}
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
+                value={formData.province || "La Union"}
+                readOnly
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
               />
             </div>
             <div>
@@ -976,7 +1244,7 @@ const handleConfirmSubmit = async () => {
                 value={formData.municipality}
                 placeholder="Select Municipality first"
                 readOnly
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
               />
             </div>
             <div>
@@ -1009,598 +1277,22 @@ const handleConfirmSubmit = async () => {
                     </span>
                   </Listbox.Button>
                   <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    {(barangayOptions[formData.municipality] || []).map(
-                      (brgy) => (
-                        <Listbox.Option
-                          key={brgy}
-                          value={brgy}
-                          className={({ active }) =>
-                            `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-blue-100 text-blue-900" : "text-gray-900"}`
-                          }
-                        >
-                          {brgy}
-                        </Listbox.Option>
-                      )
-                    )}
-                  </Listbox.Options>
-                </div>
-              </Listbox>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Street
-              </label>
-              <input
-                type="text"
-                name="street"
-                value={formData.street}
-                onChange={handleInputChange}
-                placeholder="Street"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Years of Residency
-              </label>
-              <input
-                type="number"
-                name="residency_years"
-                value={formData.residency_years}
-                onChange={handleInputChange}
-                placeholder="Year of Residency"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-          </div>
-
-          {/* Barangay Verifier Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Barangay Verifier
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Name of Verifier
-              </label>
-              <input
-                type="text"
-                name="barangay_verifier"
-                value={formData.barangay_verifier}
-                onChange={handleInputChange}
-                placeholder="Name of Verifier"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Position
-              </label>
-              <Listbox
-                value={formData.position}
-                onChange={(value) =>
-                  setFormData({ ...formData, position: value })
-                }
-              >
-                <div className="relative mt-1">
-                  <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
-                    {formData.position || "Select a position"}
-                  </Listbox.Button>
-                  <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                    {positions.map((pos, idx) => (
+                    {barangaysAddress.map((brgy) => (
                       <Listbox.Option
-                        key={idx}
-                        value={pos}
-                        className="cursor-default select-none py-2 pl-3 pr-4 text-gray-900 hover:bg-blue-100"
-                      >
-                        {pos}
-                      </Listbox.Option>
-                    ))}
-                  </Listbox.Options>
-                </div>
-              </Listbox>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Verified Date
-              </label>
-              <input
-                type="date"
-                name="verified_date"
-                value={formData.verified_date}
-                onChange={handleInputChange}
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-          </div>
-
-          {/* Number of Household Members Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Number of Household Members
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Total No. of Household Members
-              </label>
-              <input
-                type="number"
-                name="total_no_household_memb"
-                value={formData.total_no_household_memb}
-                readOnly
-                placeholder="Auto-calculated (Male + Female)"
-                className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. of Male
-              </label>
-              <input
-                type="number"
-                name="no_male"
-                value={formData.no_male}
-                onChange={handleInputChange}
-                placeholder="No. of Male"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. of Female
-              </label>
-              <input
-                type="number"
-                name="no_female"
-                value={formData.no_female}
-                onChange={handleInputChange}
-                placeholder="No. of Female"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. of Children
-              </label>
-              <input
-                type="number"
-                name="no_children"
-                value={formData.no_children}
-                onChange={handleInputChange}
-                placeholder="No. of Children"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. in School
-              </label>
-              <input
-                type="number"
-                name="no_in_school"
-                value={formData.no_in_school}
-                onChange={handleInputChange}
-                placeholder="No. in School"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. out of School
-              </label>
-              <input
-                type="number"
-                name="no_out_school"
-                value={formData.no_out_school}
-                onChange={handleInputChange}
-                placeholder="No. out of School"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. Employed
-              </label>
-              <input
-                type="number"
-                name="no_employed"
-                value={formData.no_employed}
-                onChange={handleInputChange}
-                placeholder="No. Employed"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                No. Unemployed
-              </label>
-              <input
-                type="number"
-                name="no_unemployed"
-                value={formData.no_unemployed}
-                onChange={handleInputChange}
-                placeholder="No. Unemployed"
-                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              />
-            </div>
-          </div>
-
-          {/* Organization Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Organization
-          </h2>
-          
-          {(formData.organizations || []).map((org, index) => (
-            <div key={index} className="mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Organization Name <span className="text-red-500">*</span>
-                  </label>
-                  <Listbox
-                    value={org.org_name || ""}
-                    onChange={(val) => {
-                      const updated = [...(formData.organizations || [])];
-                      updated[index] = {
-                        ...(updated[index] || {}),
-                        org_name: val,
-                      };
-                      if (val && val.toLowerCase() !== "others") {
-                        updated[index].custom_org_name = "";
-                      }
-                      setFormData((prev) => ({
-                        ...prev,
-                        organizations: updated,
-                      }));
-                    }}
-                    disabled={!formData.barangay}
-                  >
-                    <div className="relative">
-                      <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
-                        {org.org_name === "Others" && org.custom_org_name
-                          ? org.custom_org_name
-                          : org.org_name || "Select Organization"}
-                      </Listbox.Button>
-                      <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm z-10">
-                        {(
-                          organizationOptions[formData.municipality]?.[
-                            formData.barangay
-                          ] || []
-                        ).map((option, idx) => (
-                          <Listbox.Option
-                            key={idx}
-                            value={option}
-                            className="cursor-default select-none py-2 pl-3 pr-4 text-gray-900 hover:bg-blue-100"
-                          >
-                            {option || "N/A"}
-                          </Listbox.Option>
-                        ))}
-                      </Listbox.Options>
-                    </div>
-                  </Listbox>
-                  
-                  {org.org_name === "Others" && (
-                    <input
-                      type="text"
-                      value={org.custom_org_name || ""}
-                      onChange={(e) => {
-                        const updated = [...(formData.organizations || [])];
-                        updated[index] = {
-                          ...(updated[index] || {}),
-                          org_name: "Others",
-                          custom_org_name: e.target.value,
-                        };
-                        setFormData((prev) => ({
-                          ...prev,
-                          organizations: updated,
-                        }));
-                      }}
-                      placeholder="Enter organization name"
-                      className="mt-2 w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 border-gray-300"
-                      required
-                    />
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Member Since <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={org.member_since || ""}
-                    onChange={(e) => {
-                      const updated = [...(formData.organizations || [])];
-                      updated[index] = {
-                        ...(updated[index] || {}),
-                        member_since: e.target.value,
-                      };
-                      setFormData((prev) => ({
-                        ...prev,
-                        organizations: updated,
-                      }));
-                    }}
-                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Position <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={org.org_position || ""}
-                    onChange={(e) => {
-                      const updated = [...(formData.organizations || [])];
-                      updated[index] = {
-                        ...(updated[index] || {}),
-                        org_position: e.target.value,
-                      };
-                      setFormData((prev) => ({
-                        ...prev,
-                        organizations: updated,
-                      }));
-                    }}
-                    placeholder="Position"
-                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-                    required
-                  />
-                </div>
-              </div>
-              
-              {/* Add/Remove buttons */}
-              <div className="flex gap-2 mt-3">
-                {formData.organizations.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = formData.organizations.filter((_, i) => i !== index);
-                      setFormData((prev) => ({
-                        ...prev,
-                        organizations: updated,
-                      }));
-                    }}
-                    className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-                  >
-                    Remove
-                  </button>
-                )}
-                
-                {index === formData.organizations.length - 1 && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        organizations: [
-                          ...prev.organizations,
-                          { org_name: "", member_since: "", org_position: "" },
-                        ],
-                      }))
-                    }
-                    className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                  >
-                    Add Organization
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Contact Person Section */}
-          {/* Contact Person Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Contact Person
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                First Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  name="contact_fname"
-                  value={formData.contact_fname}
-                  onChange={handleInputChange}
-                  placeholder="First Name"
-                  className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Middle Name
-              </label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  name="contact_mname"
-                  value={formData.contact_mname}
-                  onChange={handleInputChange}
-                  placeholder="Middle Name"
-                  className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Last Name <span className="text-red-500">*</span>
-              </label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  name="contact_lname"
-                  value={formData.contact_lname}
-                  onChange={handleInputChange}
-                  placeholder="Last Name"
-                  className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Relationship <span className="text-red-500">*</span>
-              </label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  name="contact_relationship"
-                  value={formData.contact_relationship}
-                  onChange={handleInputChange}
-                  placeholder="Relationship"
-                  className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                  required
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-700 mb-0">
-                  Contact Number <span className="text-red-500">*</span>
-                </label>
-              </div>
-              <div className="relative mt-1">
-                <div className="flex rounded-md shadow-sm">
-                  {/* Prefix */}
-                  <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm">
-                    +63
-                  </span>
-
-                  {/* Input */}
-                  <input
-                    type="text"
-                    name="contact_contactno"
-                    value={formData.contact_contactno}
-                    onChange={(e) => {
-                      // Only allow digits, limit to 10 characters, and must start with 9
-                      let value = e.target.value
-                        .replace(/\D/g, "")
-                        .slice(0, 10);
-                      if (value && value[0] !== "9") {
-                        value = "";
-                      }
-                      handleInputChange({
-                        target: { name: "contact_contactno", value },
-                      });
-                    }}
-                    className={`relative w-full rounded-r-md border bg-white py-3 pl-3 pr-10 text-left text-gray-900 focus:outline-none focus:ring-2 ${
-                      contact_contactnoError
-                        ? "border-red-500 focus:ring-red-500 focus:border-red-500"
-                        : "border-gray-300 focus:ring-blue-500 focus:border-blue-500"
-                    }`}
-                    required
-                    pattern="9[0-9]{9}"
-                    title="Phone number must start with 9 and be 10 digits long"
-                    placeholder="9XXXXXXXXX"
-                  />
-                </div>
-
-                {/* Error message */}
-                {contact_contactnoError && (
-                  <span className="mt-1 text-xs text-red-600">
-                    {contact_contactnoError}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                City/Municipality <span className="text-red-500">*</span>
-              </label>
-              <Listbox
-                value={formData.contact_municipality || ""}
-                onChange={(val) =>
-                  setFormData((prev) => ({
-                    ...prev,
-                    contact_municipality: val,
-                    contact_barangay: "",
-                  }))
-                }
-              >
-                <div className="relative mt-1">
-                  <Listbox.Button
-                    required
-                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                  >
-                    <span className="block truncate">
-                      {formData.contact_municipality || "Select municipality"}
-                    </span>
-                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                      <ChevronUpDownIcon
-                        className="h-5 w-5 text-gray-400"
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </Listbox.Button>
-                  <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    {Object.keys(municipalityPrefixes).map((mun) => (
-                      <Listbox.Option
-                        key={mun}
-                        value={mun}
+                        key={brgy}
+                        value={brgy}
                         className={({ active }) =>
-                          `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-blue-100 text-blue-900" : "text-gray-900"}`
+                          `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                            active ? "bg-blue-100 text-blue-900" : "text-gray-900"
+                          }`
                         }
                       >
-                        {mun}
+                        {brgy}
                       </Listbox.Option>
                     ))}
                   </Listbox.Options>
                 </div>
               </Listbox>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Barangay <span className="text-red-500">*</span>
-              </label>
-              <Listbox
-                value={formData.contact_barangay || ""}
-                onChange={(val) =>
-                  setFormData((prev) => ({ ...prev, contact_barangay: val }))
-                }
-                disabled={!formData.contact_municipality}
-              >
-                <div className="relative mt-1">
-                  <Listbox.Button
-                    required
-                    className={`relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500 ${!formData.contact_municipality ? "bg-gray-100 text-gray-400 cursor-not-allowed" : ""}`}
-                    disabled={!formData.contact_municipality}
-                  >
-                    <span className="block truncate">
-                      {formData.contact_barangay ||
-                        (!formData.contact_municipality
-                          ? "Select Municipality First"
-                          : "Select Barangay")}
-                    </span>
-                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                      <ChevronUpDownIcon
-                        className="h-5 w-5 text-gray-400"
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </Listbox.Button>
-                  <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
-                    {(barangayOptions[formData.contact_municipality] || []).map(
-                      (brgy) => (
-                        <Listbox.Option
-                          key={brgy}
-                          value={brgy}
-                          className={({ active }) =>
-                            `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-blue-100 text-blue-900" : "text-gray-900"}`
-                          }
-                        >
-                          {brgy}
-                        </Listbox.Option>
-                      )
-                    )}
-                  </Listbox.Options>
-                </div>
-              </Listbox>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-gray-700">
                 Street <span className="text-red-500">*</span>
               </label>
@@ -1615,6 +1307,78 @@ const handleConfirmSubmit = async () => {
                   required
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Years of Residency</label>
+              <input
+                type="number"
+                name="residency_years"
+                value={formData.residency_years}
+                onChange={handleInputChange}
+                min={0}
+                max={Number(formData.age || 0)}
+                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+              {Number(formData.residency_years || 0) > Number(formData.age || 0) && (
+                <p className="text-sm text-red-500 mt-1">Years of residency cannot exceed age.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Barangay Verifier Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+            Barangay Verifier Information
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Position</label>
+              <select
+                name="position"
+                value={formData.position}
+                onChange={(e) => {
+                  const pos = e.target.value;
+                  const v = verifiersByPosition[pos];
+                  const full = v
+                    ? `${v.first_name} ${v.middle_name ? v.middle_name + " " : ""}${v.last_name}`.trim()
+                    : "";
+                  setFormData((prev) => ({ ...prev, position: pos, barangay_verifier: full }));
+                }}
+                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                disabled={!formData.barangay}
+              >
+                <option value="" hidden>
+                  Select Position
+                </option>
+                {Object.keys(verifiersByPosition).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Name of Verifier</label>
+              <input
+                type="text"
+                name="barangay_verifier"
+                value={formData.barangay_verifier}
+                readOnly
+                className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Verified Date</label>
+              <input
+                type="date"
+                name="verified_date"
+                value={formData.verified_date}
+                onChange={(e) => {
+                  const today = new Date();
+                  const picked = new Date(e.target.value);
+                  if (picked > today) return; // disallow future
+                  handleInputChange(e);
+                }}
+                max={new Date().toISOString().split("T")[0]}
+                className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
             </div>
           </div>
 
@@ -1850,6 +1614,20 @@ const handleConfirmSubmit = async () => {
                 }
                 className="mr-2"
               />
+              {formData.with_voterID && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium text-gray-700">Voter ID Number</label>
+                  <input
+                    type="text"
+                    name="voterID_number"
+                    value={formData.voterID_number}
+                    onChange={handleInputChange}
+                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                    placeholder="Enter Voter's ID"
+                    required
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2009,55 +1787,278 @@ const handleConfirmSubmit = async () => {
           </div>
           </div>
 
-          {/* Image Upload Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Profile Image
-          </h2>
+          {/* Household Members Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Household Members</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. of Male</label>
+              <input type="number" name="no_male" value={formData.no_male} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. of Female</label>
+              <input type="number" name="no_female" value={formData.no_female} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Total Household Members</label>
+              <input type="number" name="total_no_household_memb" value={formData.total_no_household_memb || 0} readOnly className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. of In School</label>
+              <input type="number" name="no_in_school" value={formData.no_in_school} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. of Out of School</label>
+              <input type="number" name="no_out_school" value={formData.no_out_school} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. of Children</label>
+              <input type="number" name="no_children" value={formData.no_children || 0} readOnly className="relative w-full cursor-not-allowed rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. Employed</label>
+              <input type="number" name="no_employed" value={formData.no_employed} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">No. Unemployed</label>
+              <input type="number" name="no_unemployed" value={formData.no_unemployed} onChange={handleInputChange} min={0} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+          </div>
+          {Number(formData.total_no_household_memb || 0) - Number(formData.no_children || 0) !== (Number(formData.no_employed || 0) + Number(formData.no_unemployed || 0)) && (
+            <p className="text-sm text-red-500 mt-1">Total - Children must equal Employed + Unemployed.</p>
+          )}
+
+          {/* Contact Person Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Contact Person</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">First Name</label>
+              <input type="text" name="contact_fname" value={formData.contact_fname} onChange={(e)=> setFormData(prev=>({...prev, contact_fname: e.target.value.replace(/\b\w/g, c=>c.toUpperCase())}))} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Middle Name</label>
+              <input type="text" name="contact_mname" value={formData.contact_mname} onChange={(e)=> setFormData(prev=>({...prev, contact_mname: e.target.value.replace(/\b\w/g, c=>c.toUpperCase())}))} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Last Name</label>
+              <input type="text" name="contact_lname" value={formData.contact_lname} onChange={(e)=> setFormData(prev=>({...prev, contact_lname: e.target.value.replace(/\b\w/g, c=>c.toUpperCase())}))} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Relationship</label>
+              <select name="contact_relationship" value={formData.contact_relationship} onChange={handleInputChange} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
+                <option value="" hidden>Select Relationship</option>
+                <option value="Wife">Wife</option>
+                <option value="Husband">Husband</option>
+                <option value="Sister">Sister</option>
+                <option value="Brother">Brother</option>
+                <option value="Mother">Mother</option>
+                <option value="Others">Others</option>
+              </select>
+            </div>
+            {formData.contact_relationship === "Others" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Specify Relationship</label>
+                <input type="text" name="contact_relationship_other" value={formData.contact_relationship_other || ""} onChange={handleInputChange} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Contact Number <span className="text-red-500">*</span></label>
+              <input type="text" name="contact_contactno" value={formData.contact_contactno} onChange={handleInputChange} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" placeholder="9XXXXXXXXX" maxLength="10" minLength="10" pattern="9[0-9]{9}" required />
+              {contact_contactnoError && <p className="text-sm text-red-500 mt-1">{contact_contactnoError}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">City/Municipality</label>
+              <Listbox value={formData.contact_municipality} onChange={(val)=> setFormData(prev=>({...prev, contact_municipality: val, contact_barangay: ""}))}>
+                <div className="relative mt-1">
+                  <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700">
+                    <span className="block truncate">{formData.contact_municipality || "Select municipality"}</span>
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                      <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    </span>
+                  </Listbox.Button>
+                  <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                    {municipalities.map((m)=> (
+                      <Listbox.Option key={m.municipality_id} value={m.name} className={({active})=>`relative cursor-default select-none py-2 pl-10 pr-4 ${active?"bg-blue-100 text-blue-900":"text-gray-900"}`}>
+                        {m.name}
+                      </Listbox.Option>
+                    ))}
+                  </Listbox.Options>
+                </div>
+              </Listbox>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Barangay</label>
+              <Listbox value={formData.contact_barangay} onChange={(val)=> setFormData(prev=>({...prev, contact_barangay: val}))} disabled={!formData.contact_municipality}>
+                <div className="relative mt-1">
+                  <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" disabled={!formData.contact_municipality}>
+                    <span className="block truncate">{formData.contact_barangay || (!formData.contact_municipality?"Select municipality first":"Select barangay")}</span>
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                      <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    </span>
+                  </Listbox.Button>
+                  <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                    {barangaysContact.map((brgy)=> (
+                      <Listbox.Option key={brgy} value={brgy} className={({active})=>`relative cursor-default select-none py-2 pl-10 pr-4 ${active?"bg-blue-100 text-blue-900":"text-gray-900"}`}>
+                        {brgy}
+                      </Listbox.Option>
+                    ))}
+                  </Listbox.Options>
+                </div>
+              </Listbox>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Street (optional)</label>
+              <input type="text" name="contact_street" value={formData.contact_street} onChange={handleInputChange} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900" />
+            </div>
+          </div>
+
+          {/* Organization Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Organization Information</h2>
+          {(formData.organizations || []).map((org, idx) => {
+            const opts = (organizationOptions[formData.municipality]?.[formData.barangay]) || [];
+            const years = Array.from({length: (new Date().getFullYear()-1970+1)}, (_,i)=>1970+i).reverse();
+            return (
+              <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 border-b border-gray-200 pb-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Organization Name</label>
+                  <select
+                    value={org.org_name}
+                    onChange={(e)=>{
+                      const val = e.target.value;
+                      const arr = [...(formData.organizations||[])];
+                      arr[idx] = { ...arr[idx], org_name: val, custom_org_name: val === "Others" ? (arr[idx].custom_org_name||"") : "" };
+                      setFormData((prev)=> ({...prev, organizations: arr }));
+                    }}
+                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  >
+                    <option value="" hidden>Select Organization</option>
+                    {opts.map((o)=> (<option key={o} value={o}>{o}</option>))}
+                    <option value="Others">Others</option>
+                  </select>
+                  {org.org_name === "Others" && (
+                    <input type="text" value={org.custom_org_name||""} onChange={(e)=>{
+                      const arr = [...(formData.organizations||[])];
+                      arr[idx] = { ...arr[idx], custom_org_name: e.target.value };
+                      setFormData((prev)=> ({...prev, organizations: arr }));
+                    }} placeholder="Specify organization" className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-2" />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Member Since (Year)</label>
+                  <select value={org.member_since} onChange={(e)=>{
+                    const arr = [...(formData.organizations||[])];
+                    arr[idx] = { ...arr[idx], member_since: e.target.value };
+                    setFormData((prev)=> ({...prev, organizations: arr }));
+                  }} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
+                    <option value="" hidden>Select Year</option>
+                    {years.map(y=> (<option key={y} value={y}>{y}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Position</label>
+                  <select value={org.org_position} onChange={(e)=>{
+                    const val = e.target.value;
+                    const arr = [...(formData.organizations||[])];
+                    arr[idx] = { ...arr[idx], org_position: val };
+                    setFormData((prev)=> ({...prev, organizations: arr }));
+                  }} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
+                    <option value="" hidden>Select Position</option>
+                    <option value="Member">Member</option>
+                    <option value="President">President</option>
+                    <option value="Vice President">Vice President</option>
+                    <option value="Others">Others</option>
+                  </select>
+                  {org.org_position === "Others" && (
+                    <input type="text" value={org.custom_position||""} onChange={(e)=>{
+                      const arr = [...(formData.organizations||[])];
+                      arr[idx] = { ...arr[idx], custom_position: e.target.value };
+                      setFormData((prev)=> ({...prev, organizations: arr }));
+                    }} placeholder="Specify position" className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-2" />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <div className="mt-2">
+            <button type="button" onClick={()=> setFormData(prev=> ({...prev, organizations: [...(prev.organizations||[]), { org_name: "", member_since: "", org_position: "" }] }))} className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Add Organization</button>
+          </div>
+
+          {/* Image/Attachments Section (redesigned like Add form) */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Attachments</h2>
           <div className="space-y-3">
-  <label className="block text-sm font-medium text-gray-700">
-    Upload Photo <span className="text-red-500">*</span>
-  </label>
-  <div className="relative mt-1 flex items-center gap-4">
-    <input
-      type="file"
-      accept="image/*"
-      onChange={handlePictureChange}
-      className="hidden"
-      id="fisherfolk_img_input"
-      required={!formData.fisherfolk_img} // required only if no image exists
-    />
-    <label
-      htmlFor="fisherfolk_img_input"
-      className="cursor-pointer rounded-lg bg-blue-50 py-2 px-4 text-blue-700 hover:bg-blue-100"
-    >
-      Choose Photo
-    </label>
+            {formData.picturePreview || formData.fisherfolk_img ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Profile Picture <span className="text-green-600">✓</span></label>
+                <p className="text-xs text-gray-500 mb-2">Photo preview (jpeg, png only)</p>
+                <img
+                  src={formData.picturePreview || (typeof formData.fisherfolk_img === 'string' ? formData.fisherfolk_img : (formData.fisherfolk_img ? URL.createObjectURL(formData.fisherfolk_img) : ''))}
+                  alt="Profile Preview"
+                  className="w-40 h-40 object-cover rounded-xl border border-gray-300 shadow-md mb-3"
+                />
+                <label className="inline-block cursor-pointer px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 text-sm font-medium">
+                  Change Photo
+                  <input type="file" accept="image/jpeg,image/jpg,image/png" onChange={handlePictureChange} className="hidden" />
+                </label>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Upload Profile Picture <span className="text-red-500">*</span></label>
+                <p className="text-xs text-gray-500 mt-1 mb-2">Photo preview (jpeg, png only)</p>
+                <div className="relative mt-1">
+                  <input type="file" accept="image/jpeg,image/jpg,image/png" onChange={handlePictureChange} className="block w-full max-w-xs text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" required />
+                </div>
+              </div>
+            )}
+          </div>
 
-    {formData.fisherfolk_img && (
-      <img
-        src={
-          typeof formData.fisherfolk_img === "string"
-            ? formData.fisherfolk_img // existing image URL from API
-            : URL.createObjectURL(formData.fisherfolk_img) // new file selected
-        }
-        alt="Preview"
-        className="w-40 h-40 object-cover rounded-xl border border-gray-300 shadow-md"
-      />
-    )}
+          {/* Certification Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Certification</h2>
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <p className="text-sm text-gray-700 mb-4">I have personally reviewed the information on this application and I certify under penalty of perjury that to the best of my knowledge and belief the information on this application is true and correct, and that I understand this information is subject to public.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Name of Applicant</label>
+                <div className="relative mt-1">
+                  <input type="text" value={`${formData.first_name} ${formData.middle_name ? formData.middle_name + ' ' : ''}${formData.last_name}`.trim() || 'Automatic from fisherfolk name'} readOnly className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic" />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Automatic name from fisherfolk data</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date of Application</label>
+                <div className="relative mt-1">
+                  <input type="text" value={new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} readOnly className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic" />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Automatic date</p>
+              </div>
+            </div>
+          </div>
 
-    {formData.fisherfolk_img && (
-      <button
-        type="button"
-        onClick={() =>
-          setFormData((prev) => ({ ...prev, fisherfolk_img: null }))
-        }
-        className="ml-2 text-red-500 hover:underline"
-      >
-        Remove
-      </button>
-    )}
-  </div>
-</div>
+          {/* Signatories Section */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Signatories</h2>
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 place-items-center">
+              <div className="text-center flex flex-col items-center">
+                <span className="block text-sm text-gray-500">Reviewed by</span>
+                <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
+                  {barangayVerifier ? `${barangayVerifier.first_name} ${barangayVerifier.middle_name ? barangayVerifier.middle_name + ' ' : ''}${barangayVerifier.last_name}` : 'Not assigned'}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">Barangay Captain</p>
+              </div>
+              <div className="text-center flex flex-col items-center">
+                <span className="block text-sm text-gray-500">Certified correct by</span>
+                <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
+                  {signatories.municipal ? `${signatories.municipal.first_name} ${signatories.municipal.middle_name ? signatories.municipal.middle_name + ' ' : ''}${signatories.municipal.last_name}` : 'Not assigned'}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">Municipal Agriculturist</p>
+              </div>
+              <div className="text-center flex flex-col items-center">
+                <span className="block text-sm text-gray-500">Approved by</span>
+                <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
+                  {signatories.mayor ? `${signatories.mayor.first_name} ${signatories.mayor.middle_name ? signatories.mayor.middle_name + ' ' : ''}${signatories.mayor.last_name}` : 'Not assigned'}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">Mayor</p>
+              </div>
+            </div>
+          </div>
 
           {/* Submit Button */}
           <div className="flex justify-end gap-4 mt-6">

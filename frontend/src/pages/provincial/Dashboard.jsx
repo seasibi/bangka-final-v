@@ -2,8 +2,10 @@ import React, { useEffect, useState } from "react";
 import PageTitle from "../../components/PageTitle";
 import { FaUserFriends, FaShip } from "react-icons/fa";
 import { getDashboardStats } from "../../services/dashboardService";
-import Sex_FS from "../../components/Dashboard/Sex_FS";
+import SexOverall from "../../components/Dashboard/SexOverall";
+import MainSourceIncome from "../../components/Dashboard/MainSourceIncome";
 import Boat_Municipality from "../../components/Dashboard/Boat_Municipality";
+import TrackerDonutStat from "../../components/Dashboard/TrackerDonutStat";
 import ViolationsByMunicipality from "../../components/Dashboard/ViolationsByMunicipality";
 import Loader from "../../components/Loader";
 
@@ -67,7 +69,7 @@ const ProvincialDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans">
+    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <PageTitle value="Dashboard" />
@@ -123,22 +125,32 @@ const ProvincialDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-none">
         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
-          <Sex_FS />
+          <p className="text-sm text-gray-600 mb-2">Count of fisherfolk by sex</p>
+          <SexOverall />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Main Source of Income</h3>
+          <p className="text-sm text-gray-600 mb-2">Fisherfolk by primary livelihood</p>
+          <MainSourceIncome />
         </div>
         
 
          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Boats by Municipality</h3>
+          <p className="text-sm text-gray-600 mb-2">Registered boats grouped by municipality</p>
           <Boat_Municipality />
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Quick Stats</h3>
-          <QuickStat label="Active Fisherfolk" value={stats?.quickStats.activeFisherfolkPercentage} color="bg-blue-500" />
-          <QuickStat label="Active Boats" value={stats?.quickStats.activeBoatsPercentage} color="bg-blue-400" />      
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center items-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Tracker Status</h3>
+          <p className="text-sm text-gray-600 mb-2">Active vs inactive tracking devices</p>
+          <TrackerDonutStat />
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
+          <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
           <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
         </div>
       </div>

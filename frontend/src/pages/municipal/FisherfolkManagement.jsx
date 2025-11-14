@@ -296,6 +296,7 @@ const getPrefixedRegNumber = (person) => {
           message={`Are you sure you want to ${selectedFisherfolk?.is_active ? "deactivate" : "activate"} ${selectedFisherfolk?.first_name} ${selectedFisherfolk?.last_name}?`}
           confirmText={selectedFisherfolk?.is_active ? "Deactivate" : "Activate"}
           cancelText="Cancel"
+          variant={selectedFisherfolk?.is_active ? 'danger' : 'success'}
         />
 
         <Modal
@@ -306,6 +307,7 @@ const getPrefixedRegNumber = (person) => {
           message={`Are you sure you want to edit ${selectedFisherfolk?.first_name} ${selectedFisherfolk?.last_name}'s information?`}
           confirmText="Continue"
           cancelText="Cancel"
+          variant="primary"
         />
       </div>
     </div>

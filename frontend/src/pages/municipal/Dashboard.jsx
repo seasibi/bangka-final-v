@@ -2,7 +2,8 @@ import React, { useEffect, useState } from "react";
 import PageTitle from "../../components/PageTitle";
 import { FaUserFriends, FaShip } from "react-icons/fa";
 import { getDashboardStats, getMunicipalityDashboardStats } from "../../services/dashboardService";
-import Sex_FS from "../../components/Dashboard/Sex_FS";
+import SexOverall from "../../components/Dashboard/SexOverall";
+import MainSourceIncome from "../../components/Dashboard/MainSourceIncome";
 import Boat_Municipality from "../../components/Dashboard/Boat_Municipality";
 import ViolationsByMunicipality from "../../components/Dashboard/ViolationsByMunicipality";
 import Loader from "../../components/Loader";
@@ -79,11 +80,13 @@ const MunicipalDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-    <>
       <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <PageTitle value="Dashboard" />
+          <div>
+            <PageTitle value="Dashboard" />
+            <p className="text-sm text-gray-600">Overview and quick statistics</p>
+          </div>
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -135,22 +138,31 @@ const MunicipalDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-none">
           <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
-            <Sex_FS />
+            <p className="text-sm text-gray-600 mb-2">Count of fisherfolk by sex</p>
+            <SexOverall />
           </div>
-
-
-              <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-                <BoatTypesChart />
-              </div>
-              <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-                <LivelihoodBreakdownChart />
-              </div>
-              <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-                <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
-              </div>
+          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Main Source of Income</h3>
+            <p className="text-sm text-gray-600 mb-2">Fisherfolk by primary livelihood</p>
+            <MainSourceIncome />
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Boat Types</h3>
+            <p className="text-sm text-gray-600 mb-2">Motorized vs non-motorized</p>
+            <BoatTypesChart />
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Livelihood Breakdown</h3>
+            <p className="text-sm text-gray-600 mb-2">Distribution by livelihood categories</p>
+            <LivelihoodBreakdownChart />
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
+            <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
+            <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
+          </div>
         </div>
       </div>
-    </>
   );
 }
 

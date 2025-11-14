@@ -7,7 +7,7 @@ import ReportHeader from '../../components/ReportHeader';
 import { getFisherfolkReport, getBoatReport, getBoundaryViolationReport } from '../../services/reportService';
 import useMunicipalities from '../../hooks/useMunicipalities';
 
-const AdminReportGeneration = () => {
+const PAReportGeneration = () => {
   const navigate = useNavigate();
   const { municipalities } = useMunicipalities();
   const [loading, setLoading] = useState(false);
@@ -60,10 +60,11 @@ const AdminReportGeneration = () => {
 
     // Apply filtering for Boundary Violation Report
     if (reportType === 'Boundary Violation Report' && filterBy) {
+      const pendingSet = new Set(['Not Reported', 'Under Investigation']);
       if (filterBy === 'Pending Report') {
-        filtered = filtered.filter(item => item.status === 'pending');
+        filtered = filtered.filter(item => pendingSet.has(String(item.report_status || '')));
       } else if (filterBy === 'Fisherfolk Reported') {
-        filtered = filtered.filter(item => item.status === 'reported');
+        filtered = filtered.filter(item => String(item.report_status || '') === 'Fisherfolk Reported');
       }
     }
 
@@ -115,7 +116,7 @@ const AdminReportGeneration = () => {
         }
         return ff || '';
       }
-      if (firstGroup === 'Status') return item.status || '';
+      if (firstGroup === 'Status') return item.report_status || '';
       if (firstGroup === 'Reason') return item.reason || '';
     }
     return '';
@@ -147,12 +148,14 @@ const AdminReportGeneration = () => {
   };
 
   const handleGenerateReport = () => {
-    // Open print preview in new tab
     const printWindow = window.open('', '_blank');
     const printContent = generatePrintContent();
     printWindow.document.write(printContent);
     printWindow.document.close();
     printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   const generatePrintContent = () => {
@@ -164,13 +167,6 @@ const AdminReportGeneration = () => {
 
     let tableHeaders = '';
     let tableRows = '';
-    let tableTitle = '';
-    const heading = (
-      reportType === 'Fisherfolk Report' ? 'Fisherfolk Report' :
-      reportType === 'Boat Registry Report' ? 'Boat Registry Report' :
-      reportType === 'Boundary Violation Report' ? 'Boundary Violation Report' :
-      String(reportType || 'Report')
-    );
 
     if (reportType === 'Fisherfolk Report') {
       tableHeaders = `
@@ -180,7 +176,6 @@ const AdminReportGeneration = () => {
         <th class="px-4 py-3 text-left">Name</th>
         <th class="px-4 py-3 text-left">Main Source of Livelihood</th>
       `;
-      tableTitle = `<div class="section-title">${heading}</div>`;
       tableRows = processedData.map(item => `
         <tr class="border-b">
           <td class="px-4 py-2">${item.registration_number || 'N/A'}</td>
@@ -198,7 +193,6 @@ const AdminReportGeneration = () => {
         <th class="px-4 py-3 text-left">Boat Type</th>
         <th class="px-4 py-3 text-left">Tracker Assignment</th>
       `;
-      tableTitle = `<div class="section-title">${heading}</div>`;
       tableRows = processedData.map(item => {
         const owner = item.fisherfolk_registration_number;
         return `
@@ -221,7 +215,6 @@ const AdminReportGeneration = () => {
         <th class="px-4 py-3 text-left">Reason</th>
         <th class="px-4 py-3 text-left">Status</th>
       `;
-      tableTitle = `<div class="section-title">${heading}</div>`;
       tableRows = processedData.map(item => {
         const fishermanName = typeof item.fisherfolk === 'object' && item.fisherfolk
           ? `${item.fisherfolk.first_name || ''} ${item.fisherfolk.middle_name || ''} ${item.fisherfolk.last_name || ''}`.trim()
@@ -235,9 +228,12 @@ const AdminReportGeneration = () => {
           <td class="px-4 py-2">${item.to_municipality || 'N/A'}</td>
           <td class="px-4 py-2">${item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} minutes` : 'N/A'}</td>
           <td class="px-4 py-2">
-            <span class="${item.status === 'pending' ? 'text-yellow-600' : item.status === 'reported' ? 'text-green-600' : 'text-gray-600'}">
-              ${item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
-            </span>
+            ${(() => {
+              const rs = String(item.report_status || '');
+              const label = rs === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : rs === 'Resolved' ? 'Resolved' : 'Report Pending';
+              const cls = rs === 'Fisherfolk Reported' ? 'text-green-600' : rs === 'Resolved' ? 'text-gray-600' : 'text-yellow-600';
+              return `<span class=\"${cls}\">${label}</span>`;
+            })()}
           </td>
         </tr>
       `}).join('');
@@ -249,100 +245,56 @@ const AdminReportGeneration = () => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title></title>
+        <title>${reportType} - Print Preview</title>
         <style>
-          :root {
-            --primary: #2563EB; /* blue-600 */
-            --header-offset: 170px; /* space reserved for fixed header in print */
-            --footer-offset: 110px;  /* reserved space for fixed footer in print */
-          }
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { height: 100%; }
-          body { font-family: 'Arial', sans-serif; background: white; }
-          .page { min-height: 100vh; display: flex; flex-direction: column; padding: 40px; }
+          body { font-family: 'Arial', sans-serif; padding: 40px; background: white; }
           .header { display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
           .logo { width: 80px; height: 80px; margin-right: 20px; }
           .header-text h1 { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
           .header-text p { font-size: 12px; line-height: 1.5; }
-          .report-title { text-align: center; font-size: 22px; font-weight: 700; margin: 26px 0 16px; color: #111827; position: relative; z-index: 1; }
-          .divider { height: 1px; background: #E5E7EB; margin-bottom: 16px; }
-          .content { flex: 1 0 auto; display: block; }
-          .section-title { background: #DBEAFE; color: #1D4ED8; font-weight: 600; padding: 6px 8px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
-          .card { border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px; }
-          .header-spacer { display: none; }
-          .footer-spacer { display: none; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          thead tr { background-color: var(--primary); color: #fff; }
-          th { padding: 12px; text-align: left; font-weight: 600; font-size: 12px; }
-          td { padding: 10px; border-bottom: 1px solid #E5E7EB; font-size: 12px; }
-          tr:nth-child(even) { background-color: #F9FAFB; }
-          .footer { margin-top: 24px; padding-top: 8px; text-align: center; font-size: 12px; color: #666; background: #fff; }
+          .report-title { text-align: center; font-size: 24px; font-weight: bold; margin: 30px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background-color: #5B52D6; color: white; padding: 12px; text-align: left; font-weight: 600; }
+          td { padding: 10px; border-bottom: 1px solid #ddd; }
+          tr:nth-child(even) { background-color: #f9f9f9; }
+          .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #666; }
           @media print {
-            @page { size: A4; margin: 1cm; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page { padding: 0 1cm; min-height: 100vh; display: flex; flex-direction: column; }
-            /* Show header only once (not fixed), so it appears on first page only */
-            .header { position: static; top: auto; left: auto; right: auto; background: white; z-index: 1; }
-            /* no spacer needed when header is not fixed */
-            .header-spacer { display: none; height: 0; }
-            .report-title { margin-top: 12px; }
-            /* prevent header border overlapping title */
-            .header { border-bottom: 2px solid #000; box-shadow: 0 0 0 4px #fff inset; }
-            .content { margin-top: 8px; margin-bottom: var(--footer-offset); flex: 1 1 auto; }
-            /* Fixed footer at bottom of every printed page */
-            .footer { position: fixed; bottom: 1cm; left: 1cm; right: 1cm; margin-top: 0; }
-            .footer-spacer { display: block; height: var(--footer-offset); }
-            thead { display: table-header-group; }
-            tfoot { display: table-footer-group; }
-            tr { page-break-inside: avoid; }
+            body { padding: 20px; }
+            @page { margin: 1cm; }
           }
         </style>
       </head>
       <body>
-        <div class="page">
-          <div class="header">
-            <img src="/src/assets/logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
-            <div class="header-text">
-              <h1>Office of the Provincial Agriculturist - Fisheries Section</h1>
-              <p>
-                Provincial Agriculturist Office, Aguila Road, Brgy. II<br>
-                City of San Fernando, La Union 2500<br>
-                Phone: (072) 888-3184 / 607-4492 / 607-4488<br>
-                Email: opaglaunion@yahoo.com
-              </p>
-            </div>
-          </div>
-
-          <div class="report-title">${heading}</div>
-
-          <div class="content">
-            <div class="card">
-              <table>
-              <thead>
-                <tr>${tableHeaders}</tr>
-              </thead>
-              <tbody>
-                ${tableRows}
-              </tbody>
-              <tfoot>
-                <tr><td colspan="999" style="height: var(--footer-offset);"></td></tr>
-              </tfoot>
-              </table>
-            </div>
-            <div class="footer-spacer"></div>
-          </div>
-
-          <div class="footer">
-            <p>Date Generated: ${currentDate}</p>
-            <p>&copy; ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section</p>
+        <div class="header">
+          <img src="/src/assets/logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
+          <div class="header-text">
+            <h1>Office of the Provincial Agriculturist - Fisheries Section</h1>
+            <p>
+              Provincial Agriculturist Office, Aguila Road, Brgy. II<br>
+              City of San Fernando, La Union 2500<br>
+              Phone: (072) 888-3184 / 607-4492 / 607-4488<br>
+              Email: opaglaunion@yahoo.com
+            </p>
           </div>
         </div>
+
+        <div class="report-title">${reportType}</div>
+
+        <table>
+          <thead>
+            <tr>${tableHeaders}</tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>Date Generated: ${currentDate}</p>
+          <p>&copy; ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section</p>
+        </div>
       </body>
-      <script>
-        window.addEventListener('load', function () {
-          setTimeout(function(){ window.print(); }, 50);
-        });
-      </script>
       </html>
     `;
   };
@@ -350,7 +302,6 @@ const AdminReportGeneration = () => {
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <div className="px-6 py-6">
-        {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate(-1)}
@@ -368,13 +319,11 @@ const AdminReportGeneration = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sorting Pane */}
           <div className="lg:col-span-1">
             <div className="bg-gray-100 rounded-lg shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-6">Sorting Pane</h3>
               <p className="text-sm text-gray-600 mb-6">Sort the data you need</p>
 
-              {/* Select Report */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Report</label>
                 <select
@@ -392,7 +341,6 @@ const AdminReportGeneration = () => {
                 </select>
               </div>
 
-              {/* Group By */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">Group by:</label>
@@ -435,7 +383,6 @@ const AdminReportGeneration = () => {
                 </div>
               </div>
 
-              {/* Sort By */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Sort by:</label>
                 <select
@@ -449,7 +396,6 @@ const AdminReportGeneration = () => {
                 </select>
               </div>
 
-              {/* Filter By (only for Boundary Violation Report) */}
               {reportType === 'Boundary Violation Report' && (
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Filter by:</label>
@@ -466,7 +412,6 @@ const AdminReportGeneration = () => {
                 </div>
               )}
 
-              {/* Generate Report Button */}
               <button
                 onClick={handleGenerateReport}
                 disabled={loading || processedData.length === 0}
@@ -478,7 +423,6 @@ const AdminReportGeneration = () => {
             </div>
           </div>
 
-          {/* Preview Pane */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow-md p-6">
               {loading ? (
@@ -576,11 +520,11 @@ const AdminReportGeneration = () => {
                                   <td className="px-4 py-2">{item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} min` : 'N/A'}</td>
                                   <td className="px-4 py-2">
                                     <span className={`px-2 py-1 rounded text-xs ${
-                                      item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                      item.status === 'reported' ? 'bg-green-100 text-green-800' :
-                                      'bg-gray-100 text-gray-800'
+                                      item.report_status === 'Fisherfolk Reported' ? 'bg-green-100 text-green-800' :
+                                      item.report_status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
+                                      'bg-yellow-100 text-yellow-800'
                                     }`}>
-                                      {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
+                                      {item.report_status === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : item.report_status === 'Resolved' ? 'Resolved' : 'Report Pending'}
                                     </span>
                                   </td>
                                 </>
@@ -610,4 +554,4 @@ const AdminReportGeneration = () => {
   );
 };
 
-export default AdminReportGeneration;
+export default PAReportGeneration;
