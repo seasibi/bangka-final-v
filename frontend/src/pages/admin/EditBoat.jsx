@@ -1164,7 +1164,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
           </h2>
           <div className="space-y-3">
             <label className="block text-sm font-medium text-gray-700">
-              Boat Photo (owner beside the boat) <span className="text-red-500">*</span>
+              Upload Photo <span className="text-red-500">*</span>
             </label>
             <div className="relative mt-1">
               <input

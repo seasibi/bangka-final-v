@@ -16,6 +16,44 @@ import TrackerHistoryTimeline from "../components/Tracker/TrackerHistoryTimeline
 // import { useNotifications } from "../contexts/NotificationContext";
 
 // Enhanced GPS prediction and interpolation utilities
+// Motion tracking calibration - can be overridden via localStorage('motionCalibration')
+const defaultMotionCalibration = {
+  // Speed thresholds in meters/second
+  idleSpeedMps: 0.3,            // below = stationary
+  normalSpeedMps: 3.0,          // typical small boat
+  highSpeedMps: 10.0,           // fast travel
+  // Duration scaling
+  minDurationScale: 0.55,       // fastest animation = base * minScale
+  maxDurationScale: 1.35,       // slowest animation = base * maxScale
+  speedResponseSensitivity: 0.7, // how strongly speed affects duration (0..1)
+  // Easing profile
+  accelGammaMin: 0.65,          // gamma used for fastest speeds (early acceleration)
+  accelGammaMax: 1.15,          // gamma used for slow speeds (gentler change)
+  // Smoothing
+  speedSmoothing: 0.25,         // EMA factor applied to instantaneous speed
+};
+
+const loadMotionCalibration = () => {
+  try {
+    const raw = window.localStorage.getItem('motionCalibration');
+    if (!raw) return defaultMotionCalibration;
+    const parsed = JSON.parse(raw);
+    return { ...defaultMotionCalibration, ...(parsed || {}) };
+  } catch (e) {
+    return defaultMotionCalibration;
+  }
+};
+
+// Global animation speed multiplier (lower = faster). Override via localStorage('markerAnimSpeed')
+const getAnimSpeedMultiplier = () => {
+  try {
+    const raw = window.localStorage.getItem('markerAnimSpeed');
+    const v = parseFloat(raw);
+    return Number.isFinite(v) && v > 0 ? v : 0.7; // default 0.7 => ~30% faster
+  } catch {
+    return 0.7;
+  }
+};
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371000; // meters
   const toRad = (d) => (d * Math.PI) / 180;
@@ -103,8 +141,17 @@ const interpolatePosition = (from, to, progress) => {
   };
 };
 
+// Parametric S-curve easing that supports acceleration bias via gamma
+// gamma < 1 → quicker acceleration; gamma > 1 → gentler acceleration
+const sCurve = (t, gamma = 1.0) => {
+  const clamped = Math.max(0, Math.min(1, t));
+  const a = Math.pow(clamped, gamma);
+  const b = Math.pow(1 - clamped, gamma);
+  return a / (a + b);
+};
+
 // Ultra-smooth interpolation hook with prediction
-const useUltraSmoothInterpolation = (targetPosition, previousPosition, lastUpdateTime, duration = 3000) => {
+const useUltraSmoothInterpolation = (targetPosition, previousPosition, lastUpdateTime, duration = 3000, easingGamma = 1.0) => {
   const [currentPosition, setCurrentPosition] = useState(targetPosition);
   const animationRef = useRef();
   const startTimeRef = useRef();
@@ -139,9 +186,8 @@ const useUltraSmoothInterpolation = (targetPosition, previousPosition, lastUpdat
       const currentTime = Date.now();
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-
-      // Use easing function for smoother animation
-      const easedProgress = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      // Dynamic S-curve easing (speed-aware via gamma)
+      const easedProgress = sCurve(progress, easingGamma);
 
       let interpolatedPosition;
       
@@ -171,7 +217,7 @@ const useUltraSmoothInterpolation = (targetPosition, previousPosition, lastUpdat
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [targetPosition?.lat, targetPosition?.lng, duration, currentPosition, previousPosition, lastUpdateTime]);
+  }, [targetPosition?.lat, targetPosition?.lng, duration, currentPosition, previousPosition, lastUpdateTime, easingGamma]);
 
   return currentPosition;
 };
@@ -195,15 +241,59 @@ const UltraSmoothBoatMarker = ({ feature, previousFeature, getBoatColor, createB
   }
 
   const lastUpdateTime = new Date(feature.properties.timestamp).getTime();
-  // Compute dynamic animation duration based on post interval, but clamp to fast values for responsiveness
-  let effectiveDuration = 1200; // default ~1.2s for snappy movement
+  // Compute dynamic animation duration based on interval and speed with calibration
+  const motionCfg = useMemo(() => loadMotionCalibration(), []);
+  let baseDuration = 1000; // ms baseline (faster default)
+  let computedSpeed = 0;   // m/s
   if (previousFeature && previousFeature.properties?.timestamp) {
     const prevTs = new Date(previousFeature.properties.timestamp).getTime();
     const intervalMs = Math.max(0, lastUpdateTime - prevTs);
-    // Heuristic: faster animation for long intervals; clamp between 700ms and 1500ms
-    effectiveDuration = Math.max(700, Math.min(1500, Math.floor(intervalMs * 0.15)));
+    // Faster baseline mapping: ~0.10x of posting interval, clamped to [500..1200]ms
+    baseDuration = Math.max(500, Math.min(1200, Math.floor(intervalMs * 0.10)));
+    if (previousPosition) {
+      computedSpeed = calculateSpeed(
+        previousPosition.lat, previousPosition.lng,
+        targetPosition.lat, targetPosition.lng,
+        intervalMs
+      );
+    }
   }
-  const currentPosition = useUltraSmoothInterpolation(targetPosition, previousPosition, lastUpdateTime, effectiveDuration);
+  // Smooth the instantaneous speed via EMA to avoid abrupt changes
+  const smoothedSpeedRef = useRef(0);
+  const smoothing = Math.max(0, Math.min(1, motionCfg.speedSmoothing));
+  if (computedSpeed > 0) {
+    smoothedSpeedRef.current = smoothedSpeedRef.current * (1 - smoothing) + computedSpeed * smoothing;
+  }
+  const speedMps = smoothedSpeedRef.current || computedSpeed || 0;
+
+  // Normalize speed to 0..1 using thresholds
+  const idle = motionCfg.idleSpeedMps;
+  const high = motionCfg.highSpeedMps;
+  const speedRatio = Math.max(0, Math.min(1, (speedMps - idle) / Math.max(0.001, high - idle)));
+
+  // Duration scaling based on speed (reduce duration for higher speed)
+  const sens = Math.max(0, Math.min(1, motionCfg.speedResponseSensitivity));
+  const minScale = Math.max(0.3, motionCfg.minDurationScale);
+  const maxScale = Math.max(minScale, motionCfg.maxDurationScale);
+  const durationScale = Math.max(minScale, Math.min(maxScale, 1 - sens * (speedRatio - 0.5) * 2));
+  const animMultiplier = getAnimSpeedMultiplier(); // e.g., 0.7 = faster
+  const effectiveDuration = Math.max(
+    350,
+    Math.min(1200, Math.floor(baseDuration * durationScale * animMultiplier))
+  );
+
+  // Easing gamma: smaller for higher speeds (earlier acceleration)
+  const gMin = Math.max(0.3, motionCfg.accelGammaMin);
+  const gMax = Math.max(gMin, motionCfg.accelGammaMax);
+  const easingGamma = gMax - (gMax - gMin) * speedRatio;
+
+  const currentPosition = useUltraSmoothInterpolation(
+    targetPosition,
+    previousPosition,
+    lastUpdateTime,
+    effectiveDuration,
+    easingGamma
+  );
   
   if (!hasValid) {
     console.warn('Skipping marker with invalid coordinates', coords, feature?.properties);

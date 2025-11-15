@@ -103,11 +103,10 @@ const MunicipalReportGeneration = () => {
     let filtered = [...reportData];
 
     if (reportType === 'Boundary Violation Report' && filterBy) {
-      const pendingSet = new Set(['Not Reported', 'Under Investigation']);
       if (filterBy === 'Pending Report') {
-        filtered = filtered.filter(item => pendingSet.has(String(item.report_status || '')));
+        filtered = filtered.filter(item => item.status === 'pending');
       } else if (filterBy === 'Fisherfolk Reported') {
-        filtered = filtered.filter(item => String(item.report_status || '') === 'Fisherfolk Reported');
+        filtered = filtered.filter(item => item.status === 'reported');
       }
     }
 
@@ -158,7 +157,7 @@ const MunicipalReportGeneration = () => {
         }
         return ff || '';
       }
-      if (firstGroup === 'Status') return item.report_status || '';
+      if (firstGroup === 'Status') return item.status || '';
       if (firstGroup === 'Reason') return item.reason || '';
     }
     return '';
@@ -208,9 +207,9 @@ const MunicipalReportGeneration = () => {
     let tableRows = '';
     const heading = (
       reportType === 'Fisherfolk Report' ? 'Fisherfolk Report' :
-        reportType === 'Boat Registry Report' ? 'Boat Registry Report' :
-          reportType === 'Boundary Violation Report' ? 'Boundary Violation Report' :
-            String(reportType || 'Report')
+      reportType === 'Boat Registry Report' ? 'Boat Registry Report' :
+      reportType === 'Boundary Violation Report' ? 'Boundary Violation Report' :
+      String(reportType || 'Report')
     );
 
     if (reportType === 'Fisherfolk Report') {
@@ -273,12 +272,9 @@ const MunicipalReportGeneration = () => {
           <td class="px-4 py-2">${item.to_municipality || 'N/A'}</td>
           <td class="px-4 py-2">${item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} minutes` : 'N/A'}</td>
           <td class="px-4 py-2">
-            ${(() => {
-            const rs = String(item.report_status || '');
-            const label = rs === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : rs === 'Resolved' ? 'Resolved' : 'Report Pending';
-            const cls = rs === 'Fisherfolk Reported' ? 'text-green-600' : rs === 'Resolved' ? 'text-gray-600' : 'text-yellow-600';
-            return `<span class=\"${cls}\">${label}</span>`;
-          })()}
+            <span class="${item.status === 'pending' ? 'text-yellow-600' : item.status === 'reported' ? 'text-green-600' : 'text-gray-600'}">
+              ${item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
+            </span>
           </td>
         </tr>
       `}).join('');
@@ -401,24 +397,27 @@ const MunicipalReportGeneration = () => {
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <div className="px-6 py-6">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
+            aria-label="Back"
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <div>
-            <div className="grid grid-cols-1 grid-rows-2">
-              <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                REPORT GENERATION
-              </h1>
-              <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                Generate reports according to your needs. Start by choosing a report.
-              </p>
-            </div>           
+            <PageTitle value="REPORT GENERATION" />
+            <p className="text-sm text-gray-600">Generate reports according to your needs. Start by choosing a report.</p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
             <div className="bg-gray-100 rounded-lg shadow-sm p-6">
-              <h3 className="text-lg font-semibold text-gray-800">Sorting Pane</h3>
-              <p className="text-sm text-gray-600 mb-6">Sort the data according to your needs</p>
+              <h3 className="text-lg font-semibold text-gray-800 mb-6">Sorting Pane</h3>
+              <p className="text-sm text-gray-600 mb-6">Sort the data you need</p>
 
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Report</label>
@@ -511,7 +510,7 @@ const MunicipalReportGeneration = () => {
               <button
                 onClick={handleGenerateReport}
                 disabled={loading || processedData.length === 0}
-                className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <PrinterIcon className="w-5 h-5" />
                 Generate Report
@@ -540,7 +539,7 @@ const MunicipalReportGeneration = () => {
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse">
                         <thead>
-                          <tr className="text-white" style={{ backgroundColor: "#3863CF", fontFamily: "Montserrat, sans-serif" }}>
+                          <tr className="bg-indigo-600 text-white">
                             {reportType === 'Fisherfolk Report' && (
                               <>
                                 <th className="px-4 py-3 text-left font-semibold">Registration Number</th>
@@ -614,11 +613,12 @@ const MunicipalReportGeneration = () => {
                                   <td className="px-4 py-2">{item.to_municipality || 'N/A'}</td>
                                   <td className="px-4 py-2">{item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} min` : 'N/A'}</td>
                                   <td className="px-4 py-2">
-                                    <span className={`px-2 py-1 rounded text-xs ${item.report_status === 'Fisherfolk Reported' ? 'bg-green-100 text-green-800' :
-                                        item.report_status === 'Resolved' ? 'bg-gray-100 text-gray-800' :
-                                          'bg-yellow-100 text-yellow-800'
-                                      }`}>
-                                      {item.report_status === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : item.report_status === 'Resolved' ? 'Resolved' : 'Report Pending'}
+                                    <span className={`px-2 py-1 rounded text-xs ${
+                                      item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                      item.status === 'reported' ? 'bg-green-100 text-green-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'N/A'}
                                     </span>
                                   </td>
                                 </>

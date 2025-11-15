@@ -285,7 +285,6 @@ const AddFisherfolk = () => {
         onClose={() => setAlertModal({ isOpen: false, title: '', message: '' })}
         title={alertModal.title}
         message={alertModal.message}
-        variant="danger"
       />
     </div>
   );

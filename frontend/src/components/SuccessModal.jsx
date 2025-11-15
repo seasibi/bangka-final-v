@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import Button from "./Button";
 
 // Keep this component unchanged for other parts of the app
@@ -24,23 +24,11 @@ const SuccessModal = ({ isOpen, title = "Success", message, onClose, fullScreen 
       {isOpen && (
         <>
           {/* Overlay */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: 'easeOut' }}
-            className={overlayClass}
-          />
+          <div className={overlayClass} />
 
           {/* Modal content */}
           <div className={`fixed inset-0 flex items-center justify-center p-4 ${contentZ} pointer-events-none`}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: 14 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 10 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 22, mass: 0.9 }}
-              className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full pointer-events-auto"
-            >
+            <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full pointer-events-auto">
               <div className="text-center">
                 {/* Success Icon */}
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
@@ -72,7 +60,7 @@ const SuccessModal = ({ isOpen, title = "Success", message, onClose, fullScreen 
                   </Button>
                 </div>
               </div>
-            </motion.div>
+            </div>
           </div>
         </>
       )}

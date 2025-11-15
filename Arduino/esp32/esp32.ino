@@ -45,6 +45,8 @@ static const uint32_t SEND_INTERVAL_MS = 8000;   // 8 seconds (safer for PPP red
 static const uint32_t SEND_JITTER_MS   = 1500;   // +/- jitter to avoid sync bursts
 // Timeout for PPP connect (ms)
 static const uint32_t PPP_CONNECT_TIMEOUT_MS = 30000;
+// Escape-to-AT frequency to read GNSS (reduces frequent PPP flips). 1 = every loop, 2 = every 2 loops, etc.
+static const uint8_t  GPS_ESCAPE_EVERY_N_DEFAULT = 2;
 
 // GPS acquisition helpers
 static const bool     FLIGHT_MODE_DURING_GPS = false;  // Keep cellular RF on to avoid CFUN toggles each cycle (faster updates)
@@ -76,6 +78,12 @@ static uint32_t g_beep_off_dur_ms = 150;
 static uint32_t g_last_beep_time = 0;         // Track last beep time for cooldown
 static bool     g_force_beep_request = false;  // For testing
 static esp_timer_handle_t g_beep_off_timer = nullptr; // one-shot auto-off timer
+
+// Network health tracking (used to adapt behavior and minimize reconnections)
+static uint32_t g_last_http_success_ms = 0;
+static uint16_t g_http_consecutive_failures = 0;
+static uint8_t  g_escape_every_n = GPS_ESCAPE_EVERY_N_DEFAULT;
+static uint8_t  g_loop_counter = 0;
 
 // Ensure PPPOS UART is initialized before any AT commands
 static bool g_pppos_inited = false;
@@ -1095,6 +1103,11 @@ static bool http_post_position(float lat, float lng) {
       lcd_show("HTTP Fails", "Check backend");
       delay(2000);
     }
+    g_http_consecutive_failures++;
+  }
+  else {
+    g_last_http_success_ms = millis();
+    g_http_consecutive_failures = 0;
   }
 
   // Check if backend asks us to beep (expects JSON like {\"status\":\"ok\",\"beep\":true})
@@ -1292,27 +1305,46 @@ void loop() {
   // schedule next send with small jitter to avoid synced bursts after reboot
   nextSendDue = millis() + SEND_INTERVAL_MS + (uint32_t)random(0, SEND_JITTER_MS + 1);
 
-  // 1) Read GPS while keeping PPP up: escape to AT (already handled by ensure_command_mode inside)
+  // Dynamically reduce GNSS escapes when network is healthy to minimize PPP flips
+  // - If we have multiple HTTP failures, increase frequency to every loop for faster recovery
+  // - If stable for > 2 minutes, lower frequency to every 3 loops to reduce reconnection pressure
+  if (g_http_consecutive_failures >= 2) {
+    g_escape_every_n = 1;
+  } else {
+    if (g_last_http_success_ms > 0 && (millis() - g_last_http_success_ms) > 120000UL) {
+      // stale success; keep GPS frequent
+      g_escape_every_n = 1;
+    } else {
+      g_escape_every_n = GPS_ESCAPE_EVERY_N_DEFAULT; // normal
+    }
+  }
+
+  // 1) Read GPS while keeping PPP up: escape to AT only on selected cycles
   if (FLIGHT_MODE_DURING_GPS) {
     cell_set_flight_mode(true);
   }
 
-  // Before reading coords, query CGNSINF to show status on LCD
-  ensure_command_mode();
-  lcd_spinner("GPS: Query", "CGNSINF...");
-  gps_power_on();
-  String cgns = ppp_send_and_read("AT+CGNSINF", 5000);
-  Serial.print("[GNSS] ");
-  Serial.println(cgns);
-  /* gnss_diagnostics(); */  // Skip extra diagnostics each loop to save time
+  bool shouldEscapeForGps = ((g_loop_counter++ % g_escape_every_n) == 0);
+
+  // Before reading coords, optionally query CGNSINF to show status on LCD
   int run = 0, fix = 0; float latTry = 0, lngTry = 0; float hdopSeen = 0; int satsUsed = 0;
-  bool haveCGNS = parse_cgnsinf_ex(cgns, run, fix, latTry, lngTry, hdopSeen, satsUsed);
-  if (haveCGNS) {
-    if (run == 1 && fix == 0) {
-      char l2[17]; snprintf(l2, sizeof(l2), "u:%d hd:%.1f", satsUsed, hdopSeen);
-      lcd_show("GPS: Searching", l2);
-    } else if (run == 0) {
-      lcd_status("GPS Off");
+  bool haveCGNS = false;
+  if (shouldEscapeForGps) {
+    ensure_command_mode();
+    lcd_spinner("GPS: Query", "CGNSINF...");
+    gps_power_on();
+    String cgns = ppp_send_and_read("AT+CGNSINF", 5000);
+    Serial.print("[GNSS] ");
+    Serial.println(cgns);
+    /* gnss_diagnostics(); */  // Skip extra diagnostics each loop to save time
+    haveCGNS = parse_cgnsinf_ex(cgns, run, fix, latTry, lngTry, hdopSeen, satsUsed);
+    if (haveCGNS) {
+      if (run == 1 && fix == 0) {
+        char l2[17]; snprintf(l2, sizeof(l2), "u:%d hd:%.1f", satsUsed, hdopSeen);
+        lcd_show("GPS: Searching", l2);
+      } else if (run == 0) {
+        lcd_status("GPS Off");
+      }
     }
   }
 
@@ -1323,7 +1355,14 @@ void loop() {
   if (haveCGNS && run == 1 && fix == 1 && (latTry != 0.0f || lngTry != 0.0f)) {
     lat = latTry; lng = lngTry; got = true;
   } else {
-    got = gps_get_coords(lat, lng);
+    if (shouldEscapeForGps) {
+      got = gps_get_coords(lat, lng);
+    } else if (g_has_last_known_position) {
+      // Use recent last known between full GNSS polls to keep map flowing
+      lat = g_last_known_lat;
+      lng = g_last_known_lng;
+      got = true;
+    }
   }
 
   if (got) {
@@ -1360,8 +1399,11 @@ void loop() {
     cell_set_flight_mode(false);
   }
 
-  // 2) Return to data mode and ensure PPP is up
-  bool dataMode = resume_data_mode();
+  // 2) Return to data mode and ensure PPP is up (only if we escaped this loop)
+  bool dataMode = true;
+  if (shouldEscapeForGps) {
+    dataMode = resume_data_mode();
+  }
   if (!dataMode) {
     Serial.println("[PPP] ATO failed; falling back to re-dial");
     if (!modem_dial() || !ppp_connect_blocking(PPP_CONNECT_TIMEOUT_MS)) {

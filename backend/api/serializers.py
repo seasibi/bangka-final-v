@@ -675,13 +675,12 @@ class FisherfolkSerializer(serializers.ModelSerializer):
                         org_data_list.append({})
                     org_data_list[index][field] = value
 
-        # Set created_by: prefer explicit value from caller (e.g., import view),
-        # otherwise fall back to authenticated request.user if available.
-        if "created_by" not in validated_data:
-            if request and hasattr(request, "user") and getattr(request.user, "is_authenticated", False):
-                validated_data["created_by"] = request.user
-            # If neither provided nor authenticated, leave unset; model allows null
-            
+        # Set created_by
+        if request and hasattr(request, "user") and request.user.is_authenticated:
+            validated_data["created_by"] = request.user
+        else:
+            raise serializers.ValidationError("A valid user is required to create a Fisherfolk record.")
+
         # Remove any accidental read-only payload we might have added earlier
         validated_data.pop("organizations", None)
 

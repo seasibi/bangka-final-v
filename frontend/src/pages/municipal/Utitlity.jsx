@@ -44,8 +44,8 @@ const Utility = () => {
   ];
 
   return (
-    <div className="bg-gray-50 p-2">
-      <div className="h-[50vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] xl:h-[70vh] 2xl:h-[76vh] bg-gray-50 px-4 py-6 pb-16">
+    <div className="min-h-screen bg-gray-50 p-2">
+      <div className="h-full bg-gray-50 px-4 py-6 pb-16">
         {/* Header */}
         <div className="flex items-center mb-8 mt-2">
           <div className="grid grid-cols-1 grid-rows-2">

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PropTypes from "prop-types";
 import Modal from "../../components/Modal";
 
-const BoatList = ({ boats, onEdit, controls, profileBasePath = '/admin' }) => {
+const BoatList = ({ boats, onEdit, controls }) => {
   const [selectedRegistration, setSelectedRegistration] = useState(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -144,7 +144,7 @@ const BoatList = ({ boats, onEdit, controls, profileBasePath = '/admin' }) => {
                       <button
                         onClick={() =>
                           navigate(
-                             `${profileBasePath}/boat-registry/profile/${boat.mfbr_number}`
+                            `/admin/boat-registry/profile/${boat.mfbr_number}`
                           )
                         }
                         className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md"

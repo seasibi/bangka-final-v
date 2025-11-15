@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, ChevronDown, ChevronUp, Activity, AlertTriangle, MapPin, Navigation, Anchor, Wifi, WifiOff, Check, Clock } from 'lucide-react';
 import { apiClient } from '../../services/api_urls';
 
@@ -7,6 +7,9 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [filter, setFilter] = useState('all'); // all, violations, movements, status
+  const [currentStatus, setCurrentStatus] = useState('unknown');
+  const [lastReportedAt, setLastReportedAt] = useState(null);
+  const lastReportedStatusRef = useRef(null);
 
   useEffect(() => {
     if (trackerId) {
@@ -31,7 +34,25 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
       const response = await apiClient.get(`/tracker-history/${trackerId}/`, {
         params: { filter }
       });
-      const data = Array.isArray(response.data) ? response.data : [];
+      let data = Array.isArray(response.data) ? response.data : [];
+      // Determine most recent status event
+      const statusEvents = data.filter(e => ['online','offline','reconnecting'].includes(e.event_type))
+                               .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+      if (statusEvents.length > 0) {
+        const newest = statusEvents[0];
+        setCurrentStatus(newest.event_type);
+        setLastReportedAt(newest.timestamp);
+        // Avoid duplicate "online" entries when status hasn't changed
+        if (newest.event_type === 'online' && lastReportedStatusRef.current === 'online') {
+          // Drop the very first online event to prevent duplicate reporting
+          const newestTs = newest.timestamp;
+          data = data.filter(ev => !(ev.event_type === 'online' && ev.timestamp === newestTs));
+        }
+        lastReportedStatusRef.current = newest.event_type;
+      } else {
+        setCurrentStatus('unknown');
+        setLastReportedAt(null);
+      }
       setHistory(data);
     } catch (error) {
       console.error('Error fetching tracker history:', error);
@@ -130,15 +151,20 @@ const formatCoordinate = (value) => {
   return 'N/A';
 };
 
-  // Group events by date
-  const groupedHistory = history.reduce((acc, event) => {
-    const dateKey = formatDate(event.timestamp);
-    if (!acc[dateKey]) {
-      acc[dateKey] = [];
-    }
-    acc[dateKey].push(event);
+  // Group events by date (newest events first within each day)
+  const groupedHistory = React.useMemo(() => {
+    const acc = {};
+    (history || []).forEach((event) => {
+      const dateKey = formatDate(event.timestamp);
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(event);
+    });
+    // Sort events within each date by timestamp (newest first)
+    Object.keys(acc).forEach((dateKey) => {
+      acc[dateKey].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    });
     return acc;
-  }, {});
+  }, [history]);
 
   const Wrapper = ({ children }) => {
     if (inline) {
@@ -157,7 +183,7 @@ const formatCoordinate = (value) => {
 
   const Panel = ({ children }) => (
     <div 
-      className={`bg-white ${inline ? 'rounded-2xl shadow-xl w-[360px] md:w-[420px] max-h-[80vh]' : 'rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:w-[480px] max-h-[85vh]'} flex flex-col ${inline ? '' : 'animate-slide-up'}`}
+      className={`bg-white ${inline ? 'rounded-2xl shadow-xl w-[360px] md:w-[420px] max-h-[80vh]' : 'rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:w-[520px]'} flex flex-col ${inline ? '' : 'animate-slide-up'} mb-4`}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -178,6 +204,34 @@ const formatCoordinate = (value) => {
                   MFBR: {boatData.mfbr_number}
                 </p>
               )}
+              {/* Status badge */}
+              <div className="mt-2">
+                <span className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  currentStatus === 'online'
+                    ? 'bg-green-100 text-green-700'
+                    : currentStatus === 'offline'
+                    ? 'bg-gray-100 text-gray-700'
+                    : currentStatus === 'reconnecting'
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-slate-100 text-slate-700'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    currentStatus === 'online'
+                      ? 'bg-green-500'
+                      : currentStatus === 'offline'
+                      ? 'bg-gray-500'
+                      : currentStatus === 'reconnecting'
+                      ? 'bg-yellow-500'
+                      : 'bg-slate-400'
+                  }`} />
+                  {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
+                  {lastReportedAt && (
+                    <span className="ml-2 text-[11px] font-normal opacity-70">
+                      {formatTimestamp(lastReportedAt)}
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -207,7 +261,7 @@ const formatCoordinate = (value) => {
         </div>
 
         {/* Timeline Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar pb-28 md:pb-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
@@ -364,6 +418,12 @@ const formatCoordinate = (value) => {
         }
         .animate-slide-up {
           animation: slide-up 0.3s ease-out;
+        }
+        @media (max-width: 768px) {
+          /* Ensure panel height accounts for mobile footers/safe area */
+          .animate-slide-up {
+            max-height: calc(100vh - 96px);
+          }
         }
       `}</style>
       )}

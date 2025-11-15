@@ -35,15 +35,15 @@ const BirukBilugHelp = () => {
           <h2 className="text-lg font-semibold mb-3">View Provincial Map with Boundaries</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>To open visual map, navigate to the “BirukBilug Tracking”</li>
-            <img src={vbimg1} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={vbimg1} alt="" className="my-3 rounded border" />
             <li>Choose which boundaries to display:
               Toggle to view “Water Boundaries” to focus on water areas
             </li>
-            <img src={vbimg2} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={vbimg2} alt="" className="my-3 rounded border" />
             <li>Switch to view “Land Boundaries” if you want to focus on land areas.</li>
-            <img src={vbimg3} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={vbimg3} alt="" className="my-3 rounded border" />
             <li>Use the search bar to find specific boats using MFBR numbers.</li>
-            <img src={vbimg4} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={vbimg4} alt="" className="my-3 rounded border" />
           </ol>
         </section>
 
@@ -51,7 +51,7 @@ const BirukBilugHelp = () => {
           <h2 className="text-lg font-semibold mb-3">Viewing Tracker List</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>Click the “View Tracker List” at the top-right.</li>
-             <img src={vtlimg1} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={vtlimg1} alt="" className="my-3 rounded border" />
             <li>Scroll down to see all registered trackers</li>
           </ol>
         </section>
@@ -60,21 +60,21 @@ const BirukBilugHelp = () => {
           <h2 className="text-lg font-semibold mb-3">Adding a Tracker</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>Click the “Add Tracker” button</li>
-            <img src={addimg1} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg1} alt="" className="my-3 rounded border" />
             <li>Select the Municipality; the tracker ID will generate automatically</li>
-            <img src={addimg2} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg2} alt="" className="my-3 rounded border" />
             <li>Click “Add Tracker”</li>
-            <img src={addimg3} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg3} alt="" className="my-3 rounded border" />
             <li>Click “Continue” to confirm</li>
-            <img src={addimg4} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg4} alt="" className="my-3 rounded border" />
             <li>Copy the generated token.</li>
-            <img src={addimg5} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg5} alt="" className="my-3 rounded border" />
             <li>Open the Arduino file and paste the token where required.
-            <img src={addimg6} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" /></li>
+            <img src={addimg6} alt="" className="my-3 rounded border" /></li>
             <li>Return to the system and click “Done”.</li>
-            <img src={addimg7} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg7} alt="" className="my-3 rounded border" />
             <li>A success message will appear to indicate that the tracker has been registered</li>
-            <img src={addimg8} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={addimg8} alt="" className="my-3 rounded border" />
           </ol>
         </section>
 
@@ -82,15 +82,15 @@ const BirukBilugHelp = () => {
           <h2 className="text-lg font-semibold mb-3">Assigning a Tracker to a Boat</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>Navigate to the “Boat Registry Management” and click “View Boat Profile”</li>
-            <img src={atimg1} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={atimg1} alt="" className="my-3 rounded border" />
             <li>Click the “Assign Tracker” button located within the boat profile.</li>
-            <img src={atimg2} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={atimg2} alt="" className="my-3 rounded border" />
             <li>From the list of available trackers, select the tracker you wish to assign.</li>
-            <img src={atimg3} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={atimg3} alt="" className="my-3 rounded border" />
             <li>Click the “Assign” button to link the selected tracker to the boat.</li>
-            <img src={atimg4} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={atimg4} alt="" className="my-3 rounded border" />
             <li>A success message will be displayed on the screen indicating that the tracker has been successfully assigned.</li>
-            <img src={atimg5} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={atimg5} alt="" className="my-3 rounded border" />
           </ol>
         </section>
 
@@ -98,13 +98,13 @@ const BirukBilugHelp = () => {
           <h2 className="text-lg font-semibold mb-3">Unassigning a Tracker</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>Navigate to the “Boat Registry Management” and click “View Boat Profile”</li>
-            <img src={utimg1} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={utimg1} alt="" className="my-3 rounded border" />
             <li>Click the “Unassign Tracker” button.</li>
-            <img src={utimg2} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={utimg2} alt="" className="my-3 rounded border" />
             <li>Confirm the action by clicking “Unassign”.</li>
-            <img src={utimg3} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={utimg3} alt="" className="my-3 rounded border" />
             <li>A success message will be displayed to indicate that the tracker is unassigned.</li>
-            <img src={utimg4} alt="" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+            <img src={utimg4} alt="" className="my-3 rounded border" />
           </ol>
         </section>
       </div>

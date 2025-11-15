@@ -24,9 +24,5 @@ pandas==2.2.3
 Pillow==11.0.0
 python-dotenv==1.0.1
 
-# Excel engines for pandas.read_excel
-openpyxl==3.1.5
-xlrd==2.0.1
-
 # Additional deps used by models/migrations
 django-multiselectfield==0.1.13

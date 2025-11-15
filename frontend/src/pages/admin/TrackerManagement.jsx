@@ -63,7 +63,7 @@ const TrackerManagement = () => {
   const [assignmentFilter, setAssignmentFilter] = useState("all"); // all, assigned, unassigned
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const navigate = useNavigate();
-
+  
   useEffect(() => {
     fetchTrackers();
   }, []);
@@ -129,7 +129,7 @@ const TrackerManagement = () => {
     if (!tok) return 'no-token';
     if (!tok.last_seen_at) return 'never';
     try {
-      const age = (Date.now() - new Date(tok.last_seen_at).getTime()) / 1000;
+      const age = (Date.now() - new Date(tok.last_seen_at).getTime())/1000;
       return age <= 180 ? 'online' : 'offline';
     } catch (e) {
       return 'offline';
@@ -149,7 +149,7 @@ const TrackerManagement = () => {
   const filtered = [...trackers].filter(t => {
     // Filter by search query
     const matchesQuery = !q || t.BirukBilugID.toLowerCase().includes(q) || (t.municipality || '').toLowerCase().includes(q);
-
+    
     // Filter by assignment status
     let matchesAssignment = true;
     if (assignmentFilter === "assigned") {
@@ -157,7 +157,7 @@ const TrackerManagement = () => {
     } else if (assignmentFilter === "unassigned") {
       matchesAssignment = t.status === "available";
     }
-
+    
     return matchesQuery && matchesAssignment;
   });
   const sorted = filtered.sort((a, b) => {
@@ -167,7 +167,7 @@ const TrackerManagement = () => {
     if (aIsAssigned !== bIsAssigned) {
       return bIsAssigned - aIsAssigned; // assigned (1) comes before unassigned (0)
     }
-
+    
     // Then sort by date_added (newest first) within each group
     if (a.date_added && b.date_added) {
       return new Date(b.date_added) - new Date(a.date_added);
@@ -193,24 +193,18 @@ const TrackerManagement = () => {
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full px-4 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        <div className="flex justify-between items-center ml-2">
+        <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <button
-              onClick={() => navigate('/municipal_agriculturist/birukbilugTracking')}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200"            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              onClick={() => navigate('/admin/birukbilugTracking')}
+              className="p-2 rounded-full hover:bg-gray-200 transition-colors duration-200"
+              aria-label="Back to tracking map"
+            >
+              <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-
-            <div className="grid grid-cols-1 grid-rows-2">
-              <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                TRACKER MANAGEMENT
-              </h1>
-              <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                List of registered trackers in La Union
-              </p>
-            </div>
+            <PageTitle value="BirukBilug Tracker Management" />
           </div>
 
           <div className="flex items-center gap-3">
@@ -249,7 +243,7 @@ const TrackerManagement = () => {
 
           <div className="overflow-y-auto max-h-[60vh] rounded-b">
             <table className="w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50 sticky top-0 z-10">
+                <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Municipality</th>
@@ -260,7 +254,7 @@ const TrackerManagement = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedRows.length === 0 ? (
                   <tr><td colSpan={7} className="px-6 py-4 text-center text-gray-500">No trackers found</td></tr>
                 ) : (

@@ -98,6 +98,7 @@ const ViolationsByMunicipality = ({ startDate, endDate }) => {
 
   return (
     <div className="w-full">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">Violations by Municipality</h3>
       <div className="space-y-3">
         {data.map((item) => (
           <div key={item.municipality}>

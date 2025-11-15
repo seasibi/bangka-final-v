@@ -2,8 +2,7 @@ import React, { useEffect, useState } from "react";
 import PageTitle from "../../components/PageTitle";
 import { FaUserFriends, FaShip } from "react-icons/fa";
 import { getDashboardStats } from "../../services/dashboardService";
-import SexOverall from "../../components/Dashboard/SexOverall";
-import MainSourceIncome from "../../components/Dashboard/MainSourceIncome";
+import Sex_FS from "../../components/Dashboard/Sex_FS";
 import Boat_Municipality from "../../components/Dashboard/Boat_Municipality";
 import TrackerDonutStat from "../../components/Dashboard/TrackerDonutStat";
 import ViolationsByMunicipality from "../../components/Dashboard/ViolationsByMunicipality";
@@ -68,102 +67,75 @@ const AdminDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-    <div
-      className="bg-gray-50 min-h-screen px-4 md:px-6 py-6 font-sans"
-      style={{ fontFamily: "Montserrat, sans-serif" }}
-    >
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <PageTitle value="Dashboard" />
-            <p className="text-sm text-gray-600">Overview and quick statistics</p>
-          </div>
-          <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 shadow-sm">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="text-sm rounded-md border-gray-200 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
-            />
-            <span className="text-gray-500 text-sm">to</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="text-sm rounded-md border-gray-200 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
-            />
-          </div>
-        </div>
-
-        {/* Top Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-          <StatCard
-            icon={FaUserFriends}
-            title="Active Fisherfolk"
-            value={stats?.fisherfolk.active || 0}
-            change={stats?.fisherfolk.change || 0}
-            gradient="bg-blue-600"
+    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <PageTitle value="Dashboard" />
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
           />
-          <StatCard
-            icon={FaShip}
-            title="Active Boats"
-            value={stats?.boats.active || 0}
-            change={stats?.boats.change || 0}
-            gradient="bg-blue-600"
-          />
-          <StatCard
-            icon={FaUserFriends}
-            title="Total Fisherfolk"
-            value={stats?.fisherfolk.total || 0}
-            gradient="bg-blue-600"
-          />
-          <StatCard
-            icon={FaShip}
-            title="Total Boats"
-            value={stats?.boats.total || 0}
-            gradient="bg-blue-600"
+          <span className="text-gray-500 text-sm">to</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
           />
         </div>
+      </div>
 
-        {/* Main Analytics Section */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="space-y-6 xl:col-span-2">
-            <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Sex Distribution</h3>
-              <p className="text-sm text-gray-600 mb-3">Count of fisherfolk by sex</p>
-              <SexOverall />
-            </div>
+      {/* StatCards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+        <StatCard
+          icon={FaUserFriends}
+          title="Active Fisherfolk"
+          value={stats?.fisherfolk.active || 0}
+          change={stats?.fisherfolk.change || 0}
+          gradient="bg-blue-600"
+        />
+        <StatCard
+          icon={FaShip}
+          title="Active Boats"
+          value={stats?.boats.active || 0}
+          change={stats?.boats.change || 0}
+          gradient="bg-blue-600"
+        />
+        <StatCard
+          icon={FaUserFriends}
+          title="Total Fisherfolk"
+          value={stats?.fisherfolk.total || 0}
+          gradient="bg-blue-600"
+        />
+        <StatCard
+          icon={FaShip}
+          title="Total Boats"
+          value={stats?.boats.total || 0}
+          gradient="bg-blue-600"
+        />
+      </div>
 
-            <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Main Source of Income</h3>
-              <p className="text-sm text-gray-600 mb-3">Fisherfolk by primary livelihood</p>
-              <MainSourceIncome />
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center items-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Tracker Status</h3>
-              <p className="text-sm text-gray-600 mb-3">Active vs inactive tracking devices</p>
-              <TrackerDonutStat />
-            </div>
-          </div>
+      {/* Charts & Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-none">
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
+          <Sex_FS />
         </div>
 
-        {/* Bottom Details Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-4">
-          <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Boats by Municipality</h3>
-            <p className="text-sm text-gray-600 mb-3">Registered boats grouped by municipality</p>
-            <Boat_Municipality />
-          </div>
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Boats by Municipality</h3>
+          <Boat_Municipality />
+        </div>
 
-          <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Violations by Municipality</h3>
-            <p className="text-sm text-gray-600 mb-3">Reported violations across municipalities</p>
-            <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
-          </div>
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center items-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <TrackerDonutStat />
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
         </div>
       </div>
     </div>

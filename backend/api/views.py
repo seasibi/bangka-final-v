@@ -27,7 +27,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .permissions import IsAdmin, IsSelfOrAdmin, IsAdminOrAgriReadOnly
 import pandas as pd
 from rest_framework.parsers import MultiPartParser, FormParser
-from io import BytesIO
 
 # TOKEN
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -1743,19 +1742,30 @@ def gps_geojson(request):
     
     logger.info("[GPS_GEOJSON] ===== NEW REQUEST - Fetching latest boat positions =====")
     
-    # Get latest timestamp for each boat_id
-    latest_per_boat = GpsData.objects.values('boat_id').annotate(
+    # CRITICAL FIX: Get latest timestamp for each unique tracker/boat combination
+    # This ensures multiple trackers don't overwrite each other on the map
+    latest_per_tracker = GpsData.objects.values('boat_id', 'mfbr_number', 'tracker_id').annotate(
         latest_time=Max('timestamp')
     )
     
-    # Build list of (boat_id, timestamp) tuples
-    boat_time_pairs = [(item['boat_id'], item['latest_time']) for item in latest_per_boat]
-    
-    # Fetch the actual GPS records matching these boat_id + timestamp pairs
+    # Build query to get latest GPS record for each unique tracker
     from django.db.models import Q
     query = Q()
-    for boat_id, timestamp in boat_time_pairs:
-        query |= Q(boat_id=boat_id, timestamp=timestamp)
+    for item in latest_per_tracker:
+        tracker_query = Q(timestamp=item['latest_time'])
+        tracker_query &= Q(boat_id=item['boat_id'])
+        
+        if item['mfbr_number']:
+            tracker_query &= Q(mfbr_number=item['mfbr_number'])
+        else:
+            tracker_query &= Q(mfbr_number__isnull=True)
+            
+        if item['tracker_id']:
+            tracker_query &= Q(tracker_id=item['tracker_id'])
+        else:
+            tracker_query &= Q(tracker_id__isnull=True)
+            
+        query |= tracker_query
     
     gps_data = GpsData.objects.filter(query).order_by('-timestamp')
     logger.info(f"[GPS_GEOJSON] Found {gps_data.count()} GPS records")
@@ -1833,8 +1843,20 @@ def gps_geojson(request):
                         trk = BirukbilugTracker.objects.filter(BirukBilugID=trk_id).first()
                         tracker_cache[trk_id] = trk
                     trk = tracker_cache.get(trk_id)
-                    if trk and trk.municipality:
-                        registered_municipality = trk.municipality
+                    if trk:
+                        if trk.municipality:
+                            registered_municipality = trk.municipality
+                        # If tracker is linked to a Boat, prefer its MFBR for identity and missing fields
+                        try:
+                            if getattr(trk, "boat", None):
+                                if not mfbr and getattr(trk.boat, "mfbr_number", None):
+                                    mfbr = trk.boat.mfbr_number
+                                if (not boat_name or str(boat_name).strip() == ""):
+                                    boat_name = getattr(trk.boat, "boat_name", None) or boat_name
+                                if not registered_municipality and getattr(trk.boat, "registered_municipality", None):
+                                    registered_municipality = trk.boat.registered_municipality
+                        except Exception:
+                            pass
             except Exception:
                 pass
         
@@ -1846,9 +1868,39 @@ def gps_geojson(request):
         except Exception as e:
             logger.warning(f"[GPS_GEOJSON] Could not determine current municipality for MFBR {mfbr}: {e}")
         
-        # Use current location municipality color
-        marker_color = _muni_color(current_municipality) if current_municipality else "#6b7280"
-        identifier_icon = boat_data.get('identifier_icon', 'boat') if boat_data else 'boat'
+        # Determine styling municipality: prefer boat's registered municipality, then tracker municipality, then current location
+        style_muni_name = registered_municipality or current_municipality
+        marker_color = "#6b7280"
+        identifier_icon = 'circle'
+        try:
+            from .models import Municipality
+            if style_muni_name:
+                muni_obj = (
+                    Municipality.objects.filter(name__iexact=style_muni_name).first()
+                    or (
+                        Municipality.objects.filter(name__iexact="City Of San Fernando").first()
+                        if str(style_muni_name).strip().lower() == "san fernando" else None
+                    )
+                    or (
+                        Municipality.objects.filter(name__iexact="Santo Tomas").first()
+                        if str(style_muni_name).strip().lower() in ("sto. tomas", "santo tomas") else None
+                    )
+                )
+                if muni_obj:
+                    if getattr(muni_obj, "color", None):
+                        marker_color = muni_obj.color
+                    else:
+                        marker_color = _muni_color(style_muni_name)
+                    identifier_icon = getattr(muni_obj, "identifier_icon", None) or 'circle'
+                else:
+                    marker_color = _muni_color(style_muni_name)
+                    identifier_icon = boat_data.get('identifier_icon', 'circle') if boat_data else 'circle'
+            else:
+                marker_color = _muni_color(current_municipality) if current_municipality else "#6b7280"
+                identifier_icon = boat_data.get('identifier_icon', 'circle') if boat_data else 'circle'
+        except Exception:
+            marker_color = _muni_color(style_muni_name) if style_muni_name else "#6b7280"
+            identifier_icon = boat_data.get('identifier_icon', 'circle') if boat_data else 'circle'
         
         # CRITICAL: Use MFBR as primary boat_id for consistent marker tracking
         trk_id = getattr(gps, 'tracker_id', None)
@@ -1944,8 +1996,16 @@ def ingest_positions(request):
 
     lat = request.data.get("lat") or request.data.get("latitude")
     lng = request.data.get("lng") or request.data.get("longitude")
+    device_id = request.data.get("device_id") or None
     boat_id = request.data.get("boat_id") or device.boat_id or 0
     mfbr = request.data.get("mfbr") or request.data.get("mfbr_number") or request.data.get("mfbrNo") or None
+    
+    # CRITICAL FIX: Use device_id as unique tracker identifier when boat_id is default (0)
+    # This prevents multiple ESP32 trackers from overwriting each other on the map
+    if boat_id == 0 and device_id:
+        # Create a unique boat_id from device_id hash to ensure map uniqueness
+        import hashlib
+        boat_id = int(hashlib.md5(device_id.encode()).hexdigest()[:8], 16) % 999999 + 100000
 
     try:
         lat = float(lat)
@@ -1982,9 +2042,10 @@ def ingest_positions(request):
     channel_layer = get_channel_layer()
     if channel_layer:
         now = time.time()
-        last = _LAST_BROADCAST.get(boat_id)
+        # CRITICAL FIX: Create temporary unique ID for throttling check
+        temp_unique_id = mfbr if mfbr else (tracker_id if tracker_id else f"device_{boat_id}")
+        last = _LAST_BROADCAST.get(temp_unique_id)
         if (last is None) or (now - last >= _BROADCAST_WINDOW_SEC):
-            _LAST_BROADCAST[boat_id] = now
             
             from .models import BoundaryViolationNotification
             is_in_violation = BoundaryViolationNotification.objects.filter(
@@ -2002,27 +2063,52 @@ def ingest_positions(request):
             except Exception as e:
                 logger.warning(f"Could not determine current municipality: {e}")
             
-            marker_color = _muni_color(current_municipality) if current_municipality else "#6b7280"
-            
-            # Check if boat is deactivated - skip WebSocket broadcast for deactivated boats
+            # Determine styling municipality: prefer boat's registered municipality, then tracker municipality, then current location
+            marker_color = "#6b7280"
             boat_is_active = True
-            identifier_icon = 'boat'  # default
+            identifier_icon = 'circle'
             
             if mfbr:
                 try:
-                    boat = Boat.objects.filter(mfbr_number=mfbr).first()
+                    boat = Boat.objects.filter(mfbr_number__iexact=mfbr).first()
                     if boat:
                         boat_is_active = getattr(boat, 'is_active', True)
                         registered_municipality = boat.registered_municipality
                         boat_name = str(boat.boat_name).strip() if boat.boat_name else None
-                        
-                        # CONSISTENCY FIX: Get identifier_icon from Municipality (same as gps_geojson)
-                        if boat.registered_municipality:
-                            muni_obj = Municipality.objects.filter(name=boat.registered_municipality).first()
-                            if muni_obj and muni_obj.identifier_icon:
-                                identifier_icon = muni_obj.identifier_icon
                 except Exception as e:
                     logger.error(f"Boat lookup error for {mfbr}: {e}")
+            
+            style_muni_name = registered_municipality
+            if not style_muni_name and tracker and hasattr(tracker, 'municipality') and tracker.municipality:
+                style_muni_name = tracker.municipality
+            if not style_muni_name:
+                style_muni_name = current_municipality
+            
+            try:
+                if style_muni_name:
+                    alias = str(style_muni_name).strip().lower()
+                    muni_obj = (
+                        Municipality.objects.filter(name__iexact=style_muni_name).first()
+                        or (Municipality.objects.filter(name__iexact="City Of San Fernando").first() if alias == "san fernando" else None)
+                        or (Municipality.objects.filter(name__iexact="Santo Tomas").first() if alias in ("sto. tomas", "santo tomas") else None)
+                    )
+                    if muni_obj:
+                        if getattr(muni_obj, 'color', None):
+                            marker_color = muni_obj.color
+                        else:
+                            marker_color = _muni_color(style_muni_name)
+                        identifier_icon = getattr(muni_obj, 'identifier_icon', None) or 'circle'
+                    else:
+                        marker_color = _muni_color(style_muni_name)
+                # ESP32 testing convenience
+                if marker_color == "#6b7280" and device_id and device_id.startswith(("BAC-", "TEST-")):
+                    default_muni = Municipality.objects.filter(name="San Fernando").first()
+                    if default_muni:
+                        registered_municipality = registered_municipality or "San Fernando"
+                        marker_color = default_muni.color if default_muni.color else "#3B82F6"
+                        identifier_icon = default_muni.identifier_icon if default_muni.identifier_icon else 'circle'
+            except Exception as e:
+                logger.error(f"Municipality styling error: {e}")
             
             # CRITICAL: Skip WebSocket broadcast for deactivated boats
             if not boat_is_active:
@@ -2034,8 +2120,18 @@ def ingest_positions(request):
                     boat_name = tracker.boat_name
                 elif not boat_name and mfbr:
                     boat_name = f"Boat {mfbr}"
+                elif not boat_name and device_id:
+                    # CRITICAL FIX: Fallback name for device-only trackers
+                    boat_name = f"Tracker {device_id}"
+                elif not boat_name:
+                    boat_name = f"Device {boat_id}"
                 
-                unique_boat_id = mfbr if mfbr else (tracker_id if tracker_id else f"boat_{boat_id}")
+                # Use MFBR if available, then tracker_id, then the corrected boat_id (includes device_id hash)
+                unique_boat_id = mfbr if mfbr else (tracker_id if tracker_id else f"device_{boat_id}")
+                
+                # CRITICAL FIX: Update broadcast throttling to use unique_boat_id instead of boat_id
+                # This prevents different trackers from interfering with each other's broadcasts
+                _LAST_BROADCAST[unique_boat_id] = now
                 
                 gps_feature = {
                     "type": "Feature",
@@ -2453,17 +2549,17 @@ class ImportFisherfolkExcelView(APIView):
             return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            df = _read_uploaded_table(file_obj)
+            df = pd.read_excel(file_obj)
         except Exception as e:
             return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get default admin user for created_by
+        # ✅ Get default admin user for created_by
         User = get_user_model()
         default_user = User.objects.filter(is_superuser=True).first()
         if not default_user:
             return Response({"error": "No superuser found. Please create an admin user first."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Required columns
+        # ✅ Required columns
         required_columns = [
             "registration_number", "salutations", "last_name", "first_name", "middle_name",
             "appelation", "birth_date", "age", "birth_place", "civil_status", "sex",
@@ -2471,7 +2567,7 @@ class ImportFisherfolkExcelView(APIView):
             "fishing_ground", "fma_number", "religion", "educational_background",
             "household_month_income", "other_source_income", "farming_income",
             "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-            "with_voterID", "voterID_number",  "is_CCT_4ps", "is_ICC", "main_source_livelihood",
+            "with_voterID", "voterID_number", "is_CCT_4ps", "is_ICC", "main_source_livelihood",
             "other_source_livelihood", "street", "barangay", "municipality", "province",
             "region", "residency_years", "barangay_verifier", "position", "verified_date",
             "contact_fname", "contact_mname", "contact_lname", "contact_relationship", "contact_contactno",
@@ -2480,7 +2576,7 @@ class ImportFisherfolkExcelView(APIView):
             "no_unemployed", "org_name", "member_since", "org_position"
         ]
 
-        # Check missing columns
+        # ✅ Check missing columns
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return Response(
@@ -2534,7 +2630,7 @@ class ImportFisherfolkExcelView(APIView):
 
             serializer = FisherfolkSerializer(data=fisherfolk_core)
             if serializer.is_valid():
-                fisherfolk = serializer.save(created_by=default_user)  # only here
+                fisherfolk = serializer.save(created_by=default_user)  # ✅ only here
                 imported += 1
 
                 # --- Related models (no user field here) ---
@@ -2572,85 +2668,7 @@ class ImportFisherfolkExcelView(APIView):
 
         return Response({"imported": imported, "errors": []}, status=status.HTTP_200_OK)
 
-# --- Import Boat Excel API ---
-class ImportBoatExcelView(APIView):
-    parser_classes = [MultiPartParser, FormParser]
 
-    def post(self, request, *args, **kwargs):
-        file_obj = request.FILES.get("file")
-        if not file_obj:
-            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            df = _read_uploaded_table(file_obj)
-        except Exception as e:
-            return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-        required_columns = [
-            "mfbr_number", "application_date", "type_of_registration", "fisherfolk_registration_number",
-            "type_of_ownership", "boat_name", "boat_type", "fishing_ground", "fma_number",
-            "built_place", "no_fishers", "material_used", "homeport", "built_year",
-            "engine_make", "serial_number", "horsepower", "registered_municipality"
-        ]
-
-        missing = [c for c in required_columns if c not in df.columns]
-        if missing:
-            return Response({"error": "Missing columns", "missing_columns": missing}, status=status.HTTP_400_BAD_REQUEST)
-
-        imported, errors = 0, []
-        for idx, row in df.iterrows():
-            # Build dict and coerce types
-            data = {col: row[col] for col in required_columns}
-
-            # Clean strings
-            for key in [
-                "mfbr_number","type_of_registration","fisherfolk_registration_number","type_of_ownership",
-                "boat_name","boat_type","fishing_ground","fma_number","built_place","material_used",
-                "homeport","engine_make","serial_number","horsepower","registered_municipality"
-            ]:
-                if data.get(key) is not None and not pd.isna(data.get(key)):
-                    data[key] = str(data[key]).strip()
-                else:
-                    data[key] = None
-
-            # Dates
-            try:
-                val = row["application_date"]
-                if hasattr(val, "strftime"):
-                    data["application_date"] = val.strftime("%Y-%m-%d")
-                else:
-                    parsed = pd.to_datetime(val, errors="coerce")
-                    if pd.notnull(parsed):
-                        data["application_date"] = parsed.strftime("%Y-%m-%d")
-            except Exception:
-                pass
-
-            # Integers
-            def _to_int(v):
-                try:
-                    if pd.isna(v) or v == "":
-                        return None
-                    return int(str(v).split(".")[0])
-                except Exception:
-                    return None
-            data["no_fishers"] = _to_int(row.get("no_fishers"))
-            data["built_year"] = _to_int(row.get("built_year"))
-
-            # Submit to serializer
-            serializer = BoatSerializer(data=data)
-            if serializer.is_valid():
-                try:
-                    serializer.save()
-                    imported += 1
-                except Exception as e:
-                    errors.append({"row": idx + 2, "errors": str(e)})
-            else:
-                errors.append({"row": idx + 2, "errors": serializer.errors})
-
-        status_code = status.HTTP_200_OK if not errors else status.HTTP_400_BAD_REQUEST
-        return Response({"imported": imported, "errors": errors}, status=status_code)
-
-        
 # Municipality Management ViewSets
 class MunicipalityViewSet(viewsets.ModelViewSet):
     queryset = Municipality.objects.all()
@@ -3075,21 +3093,43 @@ def tracker_history(request, tracker_id):
             gps_q |= Q(mfbr_number=mfbr)
         gps_points = list(GpsData.objects.filter(gps_q).order_by('-timestamp')[:200])
 
-        # 2) Status events
+        # Robust fallback: if no points with combined query but we know MFBR, try MFBR-only
+        if not gps_points and mfbr:
+            gps_points = list(GpsData.objects.filter(mfbr_number=mfbr).order_by('-timestamp')[:200])
+        # Last resort: tracker_id-only
+        if not gps_points and ident:
+            gps_points = list(GpsData.objects.filter(tracker_id=ident).order_by('-timestamp')[:200])
+
+        # 2) Status events (online / offline / reconnecting)
         if filter_type in ['all', 'status'] and gps_points:
             reconnect_threshold = timedelta(minutes=3)
             offline_threshold = timedelta(minutes=10)
             previous_status = None
+            now_ts = timezone.now()
             for i, point in enumerate(gps_points):
-                time_since_previous = None
-                if i < len(gps_points) - 1:
-                    time_since_previous = point.timestamp - gps_points[i + 1].timestamp
-                current_status = 'online'
-                if time_since_previous and time_since_previous > offline_threshold:
-                    current_status = 'offline'
-                elif time_since_previous and time_since_previous > reconnect_threshold:
-                    current_status = 'reconnecting'
-                if current_status != previous_status:
+                # Determine status:
+                # - For the newest point (i == 0), compare to NOW
+                # - For historical points, compare the gap to the next older point
+                if i == 0:
+                    age = now_ts - point.timestamp
+                    if age >= offline_threshold:
+                        current_status = 'offline'
+                    elif age >= reconnect_threshold:
+                        current_status = 'reconnecting'
+                    else:
+                        current_status = 'online'
+                else:
+                    gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
+                    if gap >= offline_threshold:
+                        current_status = 'offline'
+                    elif gap >= reconnect_threshold:
+                        current_status = 'reconnecting'
+                    else:
+                        current_status = 'online'
+
+                # Emit only when the status actually changes in time sequence
+                should_emit = current_status != previous_status
+                if should_emit:
                     event_title = {
                         'online': 'Tracker Online',
                         'offline': 'Tracker Offline',
@@ -3218,8 +3258,31 @@ def tracker_history(request, tracker_id):
             except Exception as e:
                 logger.warning(f"Error checking idle state: {e}")
 
-        # Sort timeline by timestamp (newest first)
-        timeline_events.sort(key=lambda x: x['timestamp'] if x['timestamp'] else '', reverse=True)
+        # Sort timeline by timestamp (newest first) using robust, TZ-safe parsing
+        from django.utils.dateparse import parse_datetime
+        from django.utils import timezone as dj_tz
+
+        def _ts_key(ev):
+            """
+            Return a numeric timestamp (seconds since epoch) for safe comparison.
+            Handles both offset-aware and naive datetimes by converting everything
+            to naive in the current timezone.
+            """
+            ts = ev.get('timestamp')
+            if not ts:
+                return 0.0
+            try:
+                dt = parse_datetime(ts)
+                if dt is None:
+                    return 0.0
+                # Normalize to naive in current timezone to avoid aware/naive comparisons
+                if dj_tz.is_aware(dt):
+                    dt = dj_tz.make_naive(dt, dj_tz.get_current_timezone())
+                return dt.timestamp()
+            except Exception:
+                return 0.0
+
+        timeline_events.sort(key=_ts_key, reverse=True)
         return Response(timeline_events, status=status.HTTP_200_OK)
     except Exception as e:
         logger.error(f"tracker_history failed: {e}")

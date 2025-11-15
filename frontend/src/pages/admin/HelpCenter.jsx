@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { FaBook, FaQuestionCircle, FaEnvelope, FaPhone, FaSearch, FaTimes, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom'
-import PageHeader from '../../components/PageHeader';
+import PageTitle from '../../components/PageTitle';
 
 const HelpCenter = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -304,11 +304,21 @@ const HelpCenter = () => {
   })
 
   return (
-    <div className="bg-gray-50 min-h-screen px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-      <div className="mb-4">
-        <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" backTo="/admin/utility" />
+    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => navigate('/admin/utility')}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200"
+          >
+            <FaChevronLeft className="w-5 h-5" />
+          </button>
+          <PageTitle value="Help Center" />
+        </div>
       </div>
 
+    <div className=" bg-white rounded-lg shadow overflow-y-auto h-[50vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] xl:h-[70vh] 2xl:h-[72vh] w-full overflow-x-hidden">     
       {/* Search Bar */}
       <div className="mb-8">
         <div className="relative max-w-2xl">
@@ -514,6 +524,7 @@ const HelpCenter = () => {
     </div>    
 
 
+    </div>
   );
 };
 

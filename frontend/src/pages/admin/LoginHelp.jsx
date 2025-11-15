@@ -32,25 +32,25 @@ const LoginHelp = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-5" style={{ fontFamily: "Montserrat, sans-serif" }}> First Time Login </h1>
             <ol className="list-decimal">
               <li className="mb-2 ml-5">Upon created go to your gmail and check your inbox, open the email and find you email and temporary password to log in to the system.</li>
-              <img src={flimg1} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
-              <img src={flimg2} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+              <img src={flimg1} className="my-3 rounded border"></img>
+              <img src={flimg2} className="my-3 rounded border"></img>
               <li className="mb-2 ml-5">Open the system and put your credentials and click <strong>“Log in”</strong> </li>
-              <img src={flimg3} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+              <img src={flimg3} className="my-3 rounded border"></img>
               <li className="mb-2 ml-5">Upon log in you are required to change your password immediately then click <strong>“Change Password”</strong>. </li>
-              <img src={flimg4} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
-              <img src={flimg5} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+              <img src={flimg4} className="my-3 rounded border"></img>
+              <img src={flimg5} className="my-3 rounded border"></img>
               <li className="mb-2 ml-5">Upon changing your password you will redirect to the log in page and then put your credentials with your new password that you created and click <strong>“Log in”</strong>. </li>
-              <img src={flimg6} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
-              <img src={flimg7} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
+              <img src={flimg6} className="my-3 rounded border"></img>
+              <img src={flimg7} className="my-3 rounded border"></img>
             </ol>
           </div>
           <div className="bg-white p-6 rounded-lg shadow mb-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-5" style={{ fontFamily: "Montserrat, sans-serif" }}> Logging In </h1>
             <ol className="list-decimal">
               <li className="mb-2 ml-5">The User must login by entering their respective Email and Password. </li>
-              <img src={img1} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
+              <img src={img1} className="my-3 rounded border"></img>
               <li className="mb-2 ml-5">After a successful login, the Dashboard will appear.  </li>
-              <img src={img2} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
+              <img src={img2} className="my-3 rounded border"></img>
             </ol>
           </div>
         </div>

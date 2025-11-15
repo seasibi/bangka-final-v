@@ -46,11 +46,12 @@ const ProvisionModal = ({ token, boatId, onClose, onCopyToken, copySuccess }) =>
         </div>
       </div>
       <div className="flex justify-end gap-3">
-        <button
-          className={`px-4 py-2 text-sm rounded-lg border transition-colors duration-200 ${copySuccess
-              ? 'bg-green-50 border-green-300 text-green-700'
+        <button 
+          className={`px-4 py-2 text-sm rounded-lg border transition-colors duration-200 ${
+            copySuccess 
+              ? 'bg-green-50 border-green-300 text-green-700' 
               : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-            }`}
+          }`}
           onClick={() => onCopyToken(token)}
         >
           {copySuccess ? (
@@ -69,8 +70,8 @@ const ProvisionModal = ({ token, boatId, onClose, onCopyToken, copySuccess }) =>
             </>
           )}
         </button>
-        <button
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+        <button 
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200" 
           onClick={onClose}
         >
           Done
@@ -150,16 +151,14 @@ const TrackerView = () => {
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200"
+            className="p-2 rounded-full hover:bg-gray-200 transition-colors duration-200"
             aria-label="Go back"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-3xl font-bold text-gray-900 " style={{ fontFamily: 'Montserrat, sans-serif' }}>
-            Tracker {tracker.BirukBilugID}
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-900">Tracker {tracker.BirukBilugID}</h1>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -182,17 +181,20 @@ const TrackerView = () => {
           {/* Status Card */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <div className="flex items-center">
-              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${tracker.status === 'assigned' ? 'bg-green-100' : 'bg-yellow-100'
-                }`}>
-                <svg className={`w-6 h-6 ${tracker.status === 'assigned' ? 'text-green-600' : 'text-yellow-600'
-                  }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
+                tracker.status === 'assigned' ? 'bg-green-100' : 'bg-yellow-100'
+              }`}>
+                <svg className={`w-6 h-6 ${
+                  tracker.status === 'assigned' ? 'text-green-600' : 'text-yellow-600'
+                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
               <div className="ml-4">
                 <div className="text-sm text-gray-500 font-medium">Status</div>
-                <div className={`text-lg font-semibold capitalize ${tracker.status === 'assigned' ? 'text-green-600' : 'text-yellow-600'
-                  }`}>{tracker.status}</div>
+                <div className={`text-lg font-semibold capitalize ${
+                  tracker.status === 'assigned' ? 'text-green-600' : 'text-yellow-600'
+                }`}>{tracker.status}</div>
               </div>
             </div>
           </div>
@@ -242,9 +244,9 @@ const TrackerView = () => {
               💡 Token is masked for security. Use “Mark Lost Device” to revoke a compromised token and re-provision a new one.
             </div>
             <div className="flex flex-wrap gap-3">
-              <button
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={handleRevokeClick}
+              <button 
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed" 
+                onClick={handleRevokeClick} 
                 disabled={!tokenRec || tokenRec?.is_active === false}
               >
                 <svg className="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -273,15 +275,15 @@ const TrackerView = () => {
       </div>
 
       {prov.open && (
-        <ProvisionModal
-          token={prov.token}
-          boatId={prov.boatId ?? undefined}
-          onClose={() => setProv({ open: false, token: "", boatId: null })}
+        <ProvisionModal 
+          token={prov.token} 
+          boatId={prov.boatId ?? undefined} 
+          onClose={() => setProv({ open: false, token: "", boatId: null })} 
           onCopyToken={handleCopyToken}
           copySuccess={copySuccess}
         />
       )}
-
+      
       {/* Revoke Token Confirmation Modal */}
       <Modal
         isOpen={revokeModalOpen}

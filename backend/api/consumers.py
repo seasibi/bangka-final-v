@@ -72,7 +72,8 @@ class GPSConsumer(AsyncWebsocketConsumer):
         try:
             from django.db.models import Q
             from .models import Boat, BoundaryViolationNotification, BirukbilugTracker
-            # Build dictionary keyed by display identifier (MFBR if available, else boat_id)
+            # Build dictionary keyed by consistent identifier:
+            # prefer MFBR; else tracker_id; else namespaced boat_id
             latest_positions = {}
             threshold_seconds = 300  # 5 minutes
             now = timezone.now()
@@ -86,34 +87,32 @@ class GPSConsumer(AsyncWebsocketConsumer):
                 .values_list('mfbr_number', flat=True)
             )
 
-            # Municipality color palette must match frontend
-            MUNICIPALITY_COLORS = {
-                "San Fernando": "#22c55e",
-                "City of San Fernando": "#22c55e",
-                "Agoo": "#3b82f6",
-                "Aringay": "#ef4444",
-                "Bacnotan": "#f59e0b",
-                "Bagulin": "#8b5cf6",
-                "Balaoan": "#ec4899",
-                "Bangar": "#14b8a6",
-                "Bauang": "#f97316",
-                "Burgos": "#a855f7",
-                "Caba": "#06b6d4",
-                "Luna": "#84cc16",
-                "Naguilian": "#eab308",
-                "Pugo": "#10b981",
-                "Rosario": "#6366f1",
-                "San Gabriel": "#d946ef",
-                "San Juan": "#06b6d4",
-                "Santol": "#f43f5e",
-                "Santo Tomas": "#0ea5e9",
-                "Sto. Tomas": "#0ea5e9",
-                "Sudipen": "#64748b",
-                "Tubao": "#737373",
-            }
+            # Helper to get Municipality color/icon from DB with sensible fallbacks
+            from .models import Municipality
+            def _get_muni(record_name: str):
+                if not record_name:
+                    return None
+                name = str(record_name).strip()
+                muni = Municipality.objects.filter(name__iexact=name).first()
+                if not muni and name.lower() == "san fernando":
+                    muni = Municipality.objects.filter(name__iexact="City Of San Fernando").first()
+                if not muni and name.lower() in ("sto. tomas", "santo tomas"):
+                    muni = Municipality.objects.filter(name__iexact="Santo Tomas").first()
+                return muni
 
             for gps in recent_gps:
-                display_id = gps.mfbr_number or gps.boat_id
+                # Resolve MFBR using tracker->boat link if gps.mfbr_number is missing
+                resolved_mfbr = gps.mfbr_number
+                tracker_obj = None
+                if not resolved_mfbr and getattr(gps, 'tracker_id', None):
+                    try:
+                        tracker_obj = BirukbilugTracker.objects.filter(BirukBilugID=gps.tracker_id).first()
+                        if tracker_obj and getattr(tracker_obj, 'boat', None) and getattr(tracker_obj.boat, 'mfbr_number', None):
+                            resolved_mfbr = tracker_obj.boat.mfbr_number
+                    except Exception:
+                        pass
+                # Consistent unique ID across HTTP and WebSocket (prefer MFBR)
+                display_id = resolved_mfbr or (getattr(gps, 'tracker_id', None) or f"boat_{gps.boat_id}")
                 # Process only first (newest) per identifier
                 if display_id in latest_positions:
                     continue
@@ -123,33 +122,41 @@ class GPSConsumer(AsyncWebsocketConsumer):
                 reg_muni = None
                 marker_color = "#6b7280"  # default gray
                 identifier_icon = "circle"  # default icon
-                if gps.mfbr_number:
-                    boat = Boat.objects.filter(mfbr_number=gps.mfbr_number).first()
+                if resolved_mfbr:
+                    boat = Boat.objects.filter(mfbr_number=resolved_mfbr).first()
                     if boat:
                         boat_name = boat.boat_name
                         reg_muni = boat.registered_municipality
-                        marker_color = MUNICIPALITY_COLORS.get(reg_muni, marker_color)
-                        # Get identifier_icon from municipality
                         try:
-                            from api.models import Municipality
-                            muni_obj = Municipality.objects.filter(name=reg_muni).first()
+                            muni_obj = _get_muni(reg_muni)
                             if muni_obj:
-                                identifier_icon = muni_obj.identifier_icon or "circle"
+                                if getattr(muni_obj, "color", None):
+                                    marker_color = muni_obj.color
+                                if getattr(muni_obj, "identifier_icon", None):
+                                    identifier_icon = muni_obj.identifier_icon or "circle"
                         except Exception:
                             pass
                 # Fallback: use tracker municipality when boat not linked yet
                 if not reg_muni and getattr(gps, 'tracker_id', None):
                     try:
-                        tracker = BirukbilugTracker.objects.filter(BirukBilugID=gps.tracker_id).first()
+                        tracker = tracker_obj or BirukbilugTracker.objects.filter(BirukBilugID=gps.tracker_id).first()
                         if tracker and tracker.municipality:
                             reg_muni = tracker.municipality
-                            marker_color = MUNICIPALITY_COLORS.get(reg_muni, marker_color)
-                            # Get identifier_icon from tracker municipality
+                            # If tracker is linked to a Boat, use its name when missing
                             try:
-                                from api.models import Municipality
-                                muni_obj = Municipality.objects.filter(name=reg_muni).first()
+                                if (not boat_name or str(boat_name).strip() == "") and getattr(tracker, "boat", None):
+                                    boat_name = getattr(tracker.boat, "boat_name", None) or boat_name
+                                    if not reg_muni and getattr(tracker.boat, "registered_municipality", None):
+                                        reg_muni = tracker.boat.registered_municipality
+                            except Exception:
+                                pass
+                            try:
+                                muni_obj = _get_muni(reg_muni)
                                 if muni_obj:
-                                    identifier_icon = muni_obj.identifier_icon or "circle"
+                                    if getattr(muni_obj, "color", None):
+                                        marker_color = muni_obj.color
+                                    if getattr(muni_obj, "identifier_icon", None):
+                                        identifier_icon = muni_obj.identifier_icon or "circle"
                             except Exception:
                                 pass
                     except Exception:
@@ -158,8 +165,12 @@ class GPSConsumer(AsyncWebsocketConsumer):
                 age_seconds = int((now - gps.timestamp).total_seconds())
                 status = "online" if age_seconds <= threshold_seconds else "offline"
                 in_violation = False
-                if gps.mfbr_number and gps.mfbr_number in active_mfbrs:
+                if resolved_mfbr and resolved_mfbr in active_mfbrs:
                     in_violation = True
+                
+                # Robust fallback: avoid "Unknown Boat" when MFBR is present
+                if (not boat_name or str(boat_name).strip() == "") and resolved_mfbr:
+                    boat_name = f"Boat {resolved_mfbr}"
 
                 latest_positions[display_id] = {
                     "type": "Feature",
@@ -170,7 +181,7 @@ class GPSConsumer(AsyncWebsocketConsumer):
                     "properties": {
                         # Keep boat_id for compatibility, but prefer MFBR visually
                         "boat_id": display_id,
-                        "mfbr_number": gps.mfbr_number,
+                        "mfbr_number": resolved_mfbr,
                         "boat_name": boat_name,
                         "registered_municipality": reg_muni,
                         "marker_color": marker_color,

@@ -560,14 +560,7 @@ const SignatoriesManagement = () => {
         </div>
       </div>
 
-      <ConfirmModal 
-        isOpen={confirmModal.isOpen} 
-        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} 
-        onConfirm={confirmModal.onConfirm} 
-        title={confirmModal.title} 
-        message={confirmModal.message}
-        variant={/delete|remove|deactivate/i.test(confirmModal.title || '') ? 'danger' : 'primary'}
-      />
+      <ConfirmModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} />
       <SuccessModal isOpen={successModal.isOpen} onClose={() => setSuccessModal({ ...successModal, isOpen: false })} title={successModal.title} message={successModal.message} />
     </div>
   );
