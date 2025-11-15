@@ -76,7 +76,7 @@ const AdminDashboard = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <PageTitle value="Dashboard" />
+            <PageTitle value="Dashboard 123 from rev-4" />
             <p className="text-sm text-gray-600">Overview and quick statistics</p>
           </div>
           <div className="flex items-center gap-2 bg-white rounded-xl px-3 py-2 shadow-sm">
