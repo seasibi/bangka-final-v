@@ -17,7 +17,7 @@ import Loader from "../../components/Loader";
 import { getBarangayVerifiers } from "../../services/barangayVerifierService";
 import { getSignatories } from "../../services/signatoriesService";
 
-const EditFisherfolk = () => {
+const EditFisherfolk = ({ backPath = "/admin/fisherfolk" }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const [error, setError] = useState(null);
@@ -365,155 +365,155 @@ const EditFisherfolk = () => {
   ];
 
   const fetchFisherfolkData = async () => {
-  try {
-    const token = getAccessToken();
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    try {
+      const token = getAccessToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    const response = await axios.get(
-      `http://localhost:8000/api/fisherfolk/${id}/`,
-      { withCredentials: true, headers }
-    );
+      const response = await axios.get(
+        `http://localhost:8000/api/fisherfolk/${id}/`,
+        { withCredentials: true, headers }
+      );
 
-    const data = response.data;
+      const data = response.data;
 
-    // Extract organization (if nested)
-    const org =
-      data.organizations && data.organizations.length > 0
-        ? data.organizations[0]
-        : { org_name: "", member_since: "", org_position: "" };
+      // Extract organization (if nested)
+      const org =
+        data.organizations && data.organizations.length > 0
+          ? data.organizations[0]
+          : { org_name: "", member_since: "", org_position: "" };
 
-    // Extract address (nested)
-    const address = data.address || {};
+      // Extract address (nested)
+      const address = data.address || {};
 
-    // Extract contacts (nested)
-    const contacts = data.contacts || {};
+      // Extract contacts (nested)
+      const contacts = data.contacts || {};
 
-    // Extract household (nested)
-    const household = data.household || {};
+      // Extract household (nested)
+      const household = data.household || {};
 
-    // Prepare organizations array
-    let organizationsArray = [{ org_name: "", member_since: "", org_position: "" }];
-    if (data.organizations && data.organizations.length > 0) {
-      // Check if org_name is in predefined list
-      const orgOptions = organizationOptions[address.municipality]?.[address.barangay] || [];
-      
-      organizationsArray = data.organizations.map(org => {
-        // Check if this org_name exists in the predefined list (case-insensitive)
-        const isInList = orgOptions.some(opt => 
-          opt && org.org_name && opt.toLowerCase() === org.org_name.toLowerCase()
-        );
+      // Prepare organizations array
+      let organizationsArray = [{ org_name: "", member_since: "", org_position: "" }];
+      if (data.organizations && data.organizations.length > 0) {
+        // Check if org_name is in predefined list
+        const orgOptions = organizationOptions[address.municipality]?.[address.barangay] || [];
         
-        // If NOT in list and org_name exists and is not already "Others"
-        if (!isInList && org.org_name && org.org_name.toLowerCase() !== "others") {
-          // This is a custom organization - set dropdown to "Others" and save name in custom_org_name
-          return {
-            ...org,
-            org_name: "Others",
-            custom_org_name: org.org_name
-          };
-        }
-        return org;
-      });
-    }
-
-    // Get the first organization (fallback to any flat fields if present)
-    let firstOrg = organizationsArray[0] || { org_name: "", member_since: "", org_position: "" };
-    if ((!firstOrg.org_name && (data.org_name || data.member_since || data.org_position))) {
-      firstOrg = {
-        org_name: data.org_name || "",
-        member_since: data.member_since || "",
-        org_position: data.org_position || "",
-      };
-    }
-
-    // Prepare fetched data
-    let fetched = {
-      ...formData,
-      ...data,
-      ...address,
-      ...contacts,
-      ...household,
-      organizations: organizationsArray,
-      org_name: firstOrg.org_name || "",
-      custom_org_name: firstOrg.custom_org_name || "",
-      member_since: firstOrg.member_since || "",
-      org_position: firstOrg.org_position || "",
-    };
-    
-    // Debug: Log organization data
-    console.log("[EditFisherfolk] Organization data:", firstOrg);
-
-    // Handle main_source_livelihood - if it's a custom value not in the predefined list, set it to "Others"
-    const predefinedLivelihoods = ["Capture Fishing", "Aquaculture", "Fish Vending", "Gleaning", "Fish Processing"];
-    let mainSourceLivelihood = data.main_source_livelihood || "";
-    let otherMainSourceLivelihood = data.other_main_source_livelihood || "";
-    
-    if (mainSourceLivelihood && !predefinedLivelihoods.includes(mainSourceLivelihood) && mainSourceLivelihood.toLowerCase() !== "others") {
-      // If the value is not in predefined list and not "Others", it's a custom value
-      otherMainSourceLivelihood = mainSourceLivelihood;
-      mainSourceLivelihood = "Others";
-    }
-
-    fetched = {
-      ...fetched,
-      fisherfolk_img: data.fisherfolk_img || null,
-      main_source_livelihood: mainSourceLivelihood,
-      other_main_source_livelihood: otherMainSourceLivelihood,
-      other_source_livelihood: Array.isArray(data.other_source_livelihood) 
-        ? data.other_source_livelihood 
-        : [],
-      // Map backend free-text detail to UI field
-      other_source_livelihood_other: data.other_source_income || "",
-      // Ensure boolean fields are properly set
-      farming_income: Boolean(data.farming_income),
-      fisheries_income: Boolean(data.fisheries_income),
-      // Local UI aggregate flag (do not bind to backend free-text field)
-      other_source_income: Boolean(data.farming_income || data.fisheries_income),
-    };
-
-    // Clean contact_number for input field
-    if (fetched.contact_number) {
-      if (fetched.contact_number.startsWith("+63")) {
-        fetched.contact_number = fetched.contact_number.slice(3);
-      } else if (fetched.contact_number.startsWith("09")) {
-        fetched.contact_number = fetched.contact_number.slice(1);
+        organizationsArray = data.organizations.map(org => {
+          // Check if this org_name exists in the predefined list (case-insensitive)
+          const isInList = orgOptions.some(opt => 
+            opt && org.org_name && opt.toLowerCase() === org.org_name.toLowerCase()
+          );
+          
+          // If NOT in list and org_name exists and is not already "Others"
+          if (!isInList && org.org_name && org.org_name.toLowerCase() !== "others") {
+            // This is a custom organization - set dropdown to "Others" and save name in custom_org_name
+            return {
+              ...org,
+              org_name: "Others",
+              custom_org_name: org.org_name
+            };
+          }
+          return org;
+        });
       }
+
+      // Get the first organization (fallback to any flat fields if present)
+      let firstOrg = organizationsArray[0] || { org_name: "", member_since: "", org_position: "" };
+      if ((!firstOrg.org_name && (data.org_name || data.member_since || data.org_position))) {
+        firstOrg = {
+          org_name: data.org_name || "",
+          member_since: data.member_since || "",
+          org_position: data.org_position || "",
+        };
+      }
+
+      // Prepare fetched data
+      let fetched = {
+        ...formData,
+        ...data,
+        ...address,
+        ...contacts,
+        ...household,
+        organizations: organizationsArray,
+        org_name: firstOrg.org_name || "",
+        custom_org_name: firstOrg.custom_org_name || "",
+        member_since: firstOrg.member_since || "",
+        org_position: firstOrg.org_position || "",
+      };
+      
+      // Debug: Log organization data
+      console.log("[EditFisherfolk] Organization data:", firstOrg);
+
+      // Handle main_source_livelihood - if it's a custom value not in the predefined list, set it to "Others"
+      const predefinedLivelihoods = ["Capture Fishing", "Aquaculture", "Fish Vending", "Gleaning", "Fish Processing"];
+      let mainSourceLivelihood = data.main_source_livelihood || "";
+      let otherMainSourceLivelihood = data.other_main_source_livelihood || "";
+      
+      if (mainSourceLivelihood && !predefinedLivelihoods.includes(mainSourceLivelihood) && mainSourceLivelihood.toLowerCase() !== "others") {
+        // If the value is not in predefined list and not "Others", it's a custom value
+        otherMainSourceLivelihood = mainSourceLivelihood;
+        mainSourceLivelihood = "Others";
+      }
+
+      fetched = {
+        ...fetched,
+        fisherfolk_img: data.fisherfolk_img || null,
+        main_source_livelihood: mainSourceLivelihood,
+        other_main_source_livelihood: otherMainSourceLivelihood,
+        other_source_livelihood: Array.isArray(data.other_source_livelihood) 
+          ? data.other_source_livelihood 
+          : [],
+        // Map backend free-text detail to UI field
+        other_source_livelihood_other: data.other_source_income || "",
+        // Ensure boolean fields are properly set
+        farming_income: Boolean(data.farming_income),
+        fisheries_income: Boolean(data.fisheries_income),
+        // Local UI aggregate flag (do not bind to backend free-text field)
+        other_source_income: Boolean(data.farming_income || data.fisheries_income),
+      };
+
+      // Clean contact_number for input field
+      if (fetched.contact_number) {
+        if (fetched.contact_number.startsWith("+63")) {
+          fetched.contact_number = fetched.contact_number.slice(3);
+        } else if (fetched.contact_number.startsWith("09")) {
+          fetched.contact_number = fetched.contact_number.slice(1);
+        }
+      }
+
+      setFormData(fetched);
+      console.log("Fetched Fisherfolk Data:", fetched);
+    } catch (error) {
+      console.error("Error fetching fisherfolk:", error);
+      if (error.response?.status === 404) {
+        setError("Fisherfolk not found.");
+      } else {
+        setError("Failed to fetch fisherfolk data. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
-
-    setFormData(fetched);
-    console.log("Fetched Fisherfolk Data:", fetched);
-  } catch (error) {
-    console.error("Error fetching fisherfolk:", error);
-    if (error.response?.status === 404) {
-      setError("Fisherfolk not found.");
-    } else {
-      setError("Failed to fetch fisherfolk data. Please try again.");
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
-const handlePictureChange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  if (!file.type.startsWith("image/")) {
-    alert("Please upload an image file.");
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    setFormData((prev) => ({
-      ...prev,
-      // Store the file for submission
-      fisherfolk_img: file,
-      // Keep a separate preview for UI
-      picturePreview: reader.result,
-    }));
   };
-  reader.readAsDataURL(file);
-};
+
+  const handlePictureChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Please upload an image file.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData((prev) => ({
+        ...prev,
+        // Store the file for submission
+        fisherfolk_img: file,
+        // Keep a separate preview for UI
+        picturePreview: reader.result,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleInputChange = (e) => {
     const { name, value, type, files } = e.target;
@@ -578,15 +578,36 @@ const handlePictureChange = (e) => {
       }
     }
 
+    // Normalize integer-only fields (strip non-digits and leading zeros)
+    const intFields = [
+      "residency_years",
+      "no_male",
+      "no_female",
+      "no_children",
+      "no_in_school",
+      "no_out_school",
+      "no_employed",
+      "no_unemployed",
+    ];
+    let nextValue = value;
+    if (intFields.includes(name)) {
+      let digits = (nextValue || "").toString().replace(/[^0-9]/g, "");
+      if (digits.length > 1) {
+        digits = digits.replace(/^0+/, "");
+        if (digits === "") digits = "0";
+      }
+      nextValue = digits;
+    }
+
     // Auto-calculate total household members when male or female changes
     if (name === "no_male" || name === "no_female") {
-      const male = name === "no_male" ? Number(value || 0) : Number(formData.no_male || 0);
-      const female = name === "no_female" ? Number(value || 0) : Number(formData.no_female || 0);
+      const male = name === "no_male" ? Number(nextValue || 0) : Number(formData.no_male || 0);
+      const female = name === "no_female" ? Number(nextValue || 0) : Number(formData.no_female || 0);
       const total = male + female;
       
       setFormData((prevState) => ({
         ...prevState,
-        [name]: value,
+        [name]: nextValue,
         total_no_household_memb: total,
       }));
       return;
@@ -594,12 +615,12 @@ const handlePictureChange = (e) => {
 
     // Auto-calculate number of children when in/out school changes
     if (name === "no_in_school" || name === "no_out_school") {
-      const inSchool = name === "no_in_school" ? Number(value || 0) : Number(formData.no_in_school || 0);
-      const outSchool = name === "no_out_school" ? Number(value || 0) : Number(formData.no_out_school || 0);
+      const inSchool = name === "no_in_school" ? Number(nextValue || 0) : Number(formData.no_in_school || 0);
+      const outSchool = name === "no_out_school" ? Number(nextValue || 0) : Number(formData.no_out_school || 0);
       const children = inSchool + outSchool;
       setFormData((prev) => ({
         ...prev,
-        [name]: value,
+        [name]: nextValue,
         no_children: children,
       }));
       return;
@@ -607,7 +628,7 @@ const handlePictureChange = (e) => {
 
     // Residency years should not exceed age
     if (name === "residency_years") {
-      const yrs = Number(value || 0);
+      const yrs = Number(nextValue || 0);
       const age = Number(formData.age || 0);
       const capped = Math.max(0, Math.min(yrs, age || yrs));
       setFormData((prev) => ({ ...prev, residency_years: capped }));
@@ -616,7 +637,7 @@ const handlePictureChange = (e) => {
 
     setFormData((prevState) => ({
       ...prevState,
-      [name]: value,
+      [name]: intFields.includes(name) ? nextValue : value,
     }));
   };
 
@@ -631,13 +652,13 @@ const handlePictureChange = (e) => {
   };
 
   const handleCancelClick = () => {
-    navigate("/admin/fisherfolk");
+    navigate(backPath);
   };
 
-const handleConfirmSubmit = async () => {
-  try {
-    const token = getAccessToken();
-    const formDataToSend = new FormData();
+  const handleConfirmSubmit = async () => {
+    try {
+      const token = getAccessToken();
+      const formDataToSend = new FormData();
 
     // Ensure contact_number includes correct prefix
     const processedFormData = { ...formData };
@@ -1915,64 +1936,144 @@ const handleConfirmSubmit = async () => {
           <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">Organization Information</h2>
           {(formData.organizations || []).map((org, idx) => {
             const opts = (organizationOptions[formData.municipality]?.[formData.barangay]) || [];
-            const years = Array.from({length: (new Date().getFullYear()-1970+1)}, (_,i)=>1970+i).reverse();
+            const hasOrgName = !!(org.org_name && org.org_name.toString().trim());
             return (
               <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 border-b border-gray-200 pb-2">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Organization Name</label>
+
+                  {/* Match AddFisherfolkForm Listbox UI */}
+                  <Listbox
+                    value={org.org_name || ""}
+                    onChange={(val) => {
+                      const picked = (val ?? "").toString().trim();
+                      const arr = [...(formData.organizations || [])];
+                      arr[idx] = {
+                        ...(arr[idx] || {}),
+                        org_name: picked,
+                      };
+
+                      if (picked && picked.toLowerCase() !== "others") {
+                        arr[idx].custom_org_name = "";
+                      }
+
+                      setFormData((prev) => ({
+                        ...prev,
+                        organizations: arr,
+                      }));
+                    }}
+                  >
+                    <div className="relative mt-1">
+                      <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500">
+                        {org.org_name || "Select Organization"}
+                      </Listbox.Button>
+
+                      <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                        {opts
+                          .filter((opt) => (opt ?? "").toString().trim() !== "")
+                          .map((option) => (
+                            <Listbox.Option
+                              key={option}
+                              value={option}
+                              className="cursor-default select-none py-2 pl-3 pr-4 text-gray-900 hover:bg-blue-100"
+                            >
+                              {option}
+                            </Listbox.Option>
+                          ))}
+                        {!opts.some(
+                          (o) =>
+                            (o ?? "")
+                              .toString()
+                              .trim()
+                              .toLowerCase() === "others"
+                        ) && (
+                          <Listbox.Option
+                            value="Others"
+                            className="cursor-default select-none py-2 pl-3 pr-4 text-gray-900 hover:bg-blue-100"
+                          >
+                            Others
+                          </Listbox.Option>
+                        )}
+                      </Listbox.Options>
+                    </div>
+                  </Listbox>
+
+                  {/* "Others" input */}
+                  {(org.org_name || "").toString().trim().toLowerCase() ===
+                    "others" && (
+                    <input
+                      type="text"
+                      placeholder="Enter organization name"
+                      value={org.custom_org_name || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        const arr = [...(formData.organizations || [])];
+                        arr[idx] = {
+                          ...(arr[idx] || {}),
+                          org_name: "Others",
+                          custom_org_name: value,
+                        };
+                        setFormData((prev) => ({
+                          ...prev,
+                          organizations: arr,
+                        }));
+                      }}
+                      className="relative w-full mt-2 rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Member Since (Year)</label>
+                  <input
+                    type="text"
+                    value={org.member_since || ""}
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="YYYY"
+                    disabled={!hasOrgName}
+                    onChange={(e)=>{
+                      const raw = e.target.value || "";
+                      const year = raw.replace(/[^0-9]/g, "").slice(0, 4);
+                      const arr = [...(formData.organizations||[])];
+                      arr[idx] = { ...arr[idx], member_since: year };
+                      setFormData((prev)=> ({...prev, organizations: arr }));
+                    }}
+                    className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Position</label>
                   <select
-                    value={org.org_name}
+                    value={org.org_position}
+                    disabled={!hasOrgName}
                     onChange={(e)=>{
                       const val = e.target.value;
                       const arr = [...(formData.organizations||[])];
-                      arr[idx] = { ...arr[idx], org_name: val, custom_org_name: val === "Others" ? (arr[idx].custom_org_name||"") : "" };
+                      arr[idx] = { ...arr[idx], org_position: val };
                       setFormData((prev)=> ({...prev, organizations: arr }));
                     }}
                     className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                   >
-                    <option value="" hidden>Select Organization</option>
-                    {opts.map((o)=> (<option key={o} value={o}>{o}</option>))}
-                    <option value="Others">Others</option>
-                  </select>
-                  {org.org_name === "Others" && (
-                    <input type="text" value={org.custom_org_name||""} onChange={(e)=>{
-                      const arr = [...(formData.organizations||[])];
-                      arr[idx] = { ...arr[idx], custom_org_name: e.target.value };
-                      setFormData((prev)=> ({...prev, organizations: arr }));
-                    }} placeholder="Specify organization" className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-2" />
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Member Since (Year)</label>
-                  <select value={org.member_since} onChange={(e)=>{
-                    const arr = [...(formData.organizations||[])];
-                    arr[idx] = { ...arr[idx], member_since: e.target.value };
-                    setFormData((prev)=> ({...prev, organizations: arr }));
-                  }} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
-                    <option value="" hidden>Select Year</option>
-                    {years.map(y=> (<option key={y} value={y}>{y}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Position</label>
-                  <select value={org.org_position} onChange={(e)=>{
-                    const val = e.target.value;
-                    const arr = [...(formData.organizations||[])];
-                    arr[idx] = { ...arr[idx], org_position: val };
-                    setFormData((prev)=> ({...prev, organizations: arr }));
-                  }} className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900">
                     <option value="" hidden>Select Position</option>
-                    <option value="Member">Member</option>
                     <option value="President">President</option>
-                    <option value="Vice President">Vice President</option>
+                    <option value="Secretary">Secretary</option>
+                    <option value="Member">Member</option>
                     <option value="Others">Others</option>
                   </select>
                   {org.org_position === "Others" && (
-                    <input type="text" value={org.custom_position||""} onChange={(e)=>{
-                      const arr = [...(formData.organizations||[])];
-                      arr[idx] = { ...arr[idx], custom_position: e.target.value };
-                      setFormData((prev)=> ({...prev, organizations: arr }));
-                    }} placeholder="Specify position" className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-2" />
+                    <input
+                      type="text"
+                      value={org.custom_position||""}
+                      disabled={!hasOrgName}
+                      onChange={(e)=>{
+                        const arr = [...(formData.organizations||[])];
+                        arr[idx] = { ...arr[idx], custom_position: e.target.value };
+                        setFormData((prev)=> ({...prev, organizations: arr }));
+                      }}
+                      placeholder="Specify position"
+                      className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-2"
+                    />
                   )}
                 </div>
               </div>

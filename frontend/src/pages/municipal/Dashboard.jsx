@@ -80,14 +80,19 @@ const MunicipalDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-      <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+      <div className="bg-gray-50 px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-            <PageTitle value="Dashboard" />
-            <p className="text-sm text-gray-600">Overview and quick statistics</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              DASHBOARD
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Overview and quick statistics
+            </p>
           </div>
           <div className="flex items-center gap-2">
+            <p className="text-gray-500 text-sm">Date Range: </p>
             <input
               type="date"
               value={startDate}

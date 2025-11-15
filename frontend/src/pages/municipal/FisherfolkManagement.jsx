@@ -156,7 +156,7 @@ const MAFisherfolkManagement = () => {
     setIsEditModalOpen(false);
     // Use registration_number for navigation if available, else fallback to id
     const editKey = selectedFisherfolk.registration_number || selectedFisherfolk.id;
-    navigate(`/admin/fisherfolk/edit/${editKey}`);
+    navigate(`/municipal_agriculturist/fisherfolkManagement/${editKey}/edit`);
   };
 
   // helper: read nested address from a fisherfolk object (robust to multiple shapes)
@@ -372,7 +372,7 @@ const MAFisherfolkManagement = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <button
-                              onClick={() => navigate(`/admin/fisherfolk/profile/${person.registration_number}`)}
+                              onClick={() => navigate(`/municipal_agriculturist/fisherfolkManagement/profile/${person.registration_number}`)}
                               className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md"
                             >
                               View Profile

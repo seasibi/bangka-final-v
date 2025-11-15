@@ -304,9 +304,9 @@ const HelpCenter = () => {
   })
 
   return (
-    <div className="bg-gray-50 min-h-screen px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+    <div className="bg-gray-50 px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <div className="mb-4">
-        <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" backTo="/admin/utility" />
+        <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" backTo="/municipal_agriculturist/utility" />
       </div>
 
       {/* Search Bar */}
