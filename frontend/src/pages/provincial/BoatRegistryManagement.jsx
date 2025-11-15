@@ -88,21 +88,21 @@ const PABoatRegistryManagement = () => {
   };
 
   const handleAssignClick = async (mfbrNumber) => {
-  const boat = boats.find(b => b.mfbr_number === mfbrNumber);
-  if (boat) {
-    setSelectedAssignBoat(boat);
-    try {
-      const allTrackers = await getTrackers();
-      const mun = boat?.fisherfolk?.address?.municipality || boat?.fisherfolk?.municipality || '';
-      const available = (Array.isArray(allTrackers) ? allTrackers : allTrackers?.results || [])
-        .filter(t => t.status === 'available' && (!mun || muniEq(t.municipality, mun)));
-      setAssignTrackers(available);
-      setIsAssignModalOpen(true);
-    } catch {
-      setError('Failed to fetch trackers');
+    const boat = boats.find(b => b.mfbr_number === mfbrNumber);
+    if (boat) {
+      setSelectedAssignBoat(boat);
+      try {
+        const allTrackers = await getTrackers();
+        const mun = boat?.fisherfolk?.address?.municipality || boat?.fisherfolk?.municipality || '';
+        const available = (Array.isArray(allTrackers) ? allTrackers : allTrackers?.results || [])
+          .filter(t => t.status === 'available' && (!mun || muniEq(t.municipality, mun)));
+        setAssignTrackers(available);
+        setIsAssignModalOpen(true);
+      } catch {
+        setError('Failed to fetch trackers');
+      }
     }
-  }
-};
+  };
 
   const handleArchiveConfirm = async () => {
     if (!selectedBoat) return;
@@ -121,9 +121,9 @@ const PABoatRegistryManagement = () => {
 
   if (loading) {
     return (
-     <div className="p-4">
+      <div className="p-4">
         <div className="flex justify-center items-center h-64">
-          <Loader/>
+          <Loader />
         </div>
       </div>
     );
@@ -141,8 +141,15 @@ const PABoatRegistryManagement = () => {
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full px-4 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="Boat Registry Management" />
+        <div className="flex justify-between items-center">
+          <div className="grid grid-cols-1 grid-rows-2 ml-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              BOAT REGISTRY MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage boat records
+            </p>
+          </div>
         </div>
 
         {error && (
@@ -265,7 +272,7 @@ const PABoatRegistryManagement = () => {
               )
           }
           confirmText={assignTrackers.length === 0 ? "" : "Assign"}
-  cancelText="Cancel"
+          cancelText="Cancel"
         />
 
       </div>

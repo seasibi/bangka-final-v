@@ -70,84 +70,84 @@ const PAFisherfolkManagement = () => {
 
 
   // helper: read nested address from a fisherfolk object (robust to multiple shapes)
-const getAddressForFisherfolk = (person) => {
-  if (!person) return null;
+  const getAddressForFisherfolk = (person) => {
+    if (!person) return null;
 
-  // 1) prefer explicit address object
-  if (person.address && typeof person.address === "object") return person.address;
+    // 1) prefer explicit address object
+    if (person.address && typeof person.address === "object") return person.address;
 
-  // 2) then addresses array
-  if (Array.isArray(person.addresses) && person.addresses.length > 0) return person.addresses[0];
+    // 2) then addresses array
+    if (Array.isArray(person.addresses) && person.addresses.length > 0) return person.addresses[0];
 
-  // 3) some serializers put address fields flattened on the person object
-  if (person.barangay || person.municipality || person.street) {
-    return {
-      street: person.street || "",
-      barangay: person.barangay || "",
-      municipality: person.municipality || "",
-      province: person.province || "",
-      region: person.region || "",
-      residency_years: person.residency_years || "",
-      barangay_verifier: person.barangay_verifier || "",
-      position: person.position || "",
-      verified_date: person.verified_date || "",
-    };
-  }
-
-  // nothing available
-  return null;
-};
-
-// helper: return correct prefixed registration number
-const getPrefixedRegNumber = (person) => {
-  if (!person) return "";
-
-  const municipalityPrefixesLocal = municipalityPrefixes; // from top-level const
-
-  const address = getAddressForFisherfolk(person);
-  let municipality = (address?.municipality || person?.municipality || "").toString().trim();
-
-  // normalize common variations (trim, collapse extra spaces)
-  municipality = municipality.replace(/\s+/g, " ").trim();
-
-  // find matching key case-insensitively
-  const muniKey = Object.keys(municipalityPrefixesLocal).find(
-    (k) => k.toLowerCase() === municipality.toLowerCase()
-  );
-
-  const prefix = muniKey ? municipalityPrefixesLocal[muniKey] : "XXX";
-
-  // Registration number raw
-  let reg = (person.registration_number || "").toString().trim();
-
-  // If no reg number, return prefix + placeholder
-  if (!reg) return `${prefix}-UNKNOWN`;
-
-  // If reg already starts with a 3-letter prefix, extract it
-  const match = reg.match(/^([A-Z]{3})-(.+)$/);
-  if (match) {
-    const existingPrefix = match[1];
-    const rest = match[2];
-
-    // If existing prefix is already the correct one => return as-is
-    if (existingPrefix === prefix) {
-      return reg;
+    // 3) some serializers put address fields flattened on the person object
+    if (person.barangay || person.municipality || person.street) {
+      return {
+        street: person.street || "",
+        barangay: person.barangay || "",
+        municipality: person.municipality || "",
+        province: person.province || "",
+        region: person.region || "",
+        residency_years: person.residency_years || "",
+        barangay_verifier: person.barangay_verifier || "",
+        position: person.position || "",
+        verified_date: person.verified_date || "",
+      };
     }
 
-    // If existing prefix appears in our prefixes (reverse lookup), but is different,
-    // replace it with the correct prefix.
-    const knownPrefixes = new Set(Object.values(municipalityPrefixesLocal));
-    if (knownPrefixes.has(existingPrefix)) {
+    // nothing available
+    return null;
+  };
+
+  // helper: return correct prefixed registration number
+  const getPrefixedRegNumber = (person) => {
+    if (!person) return "";
+
+    const municipalityPrefixesLocal = municipalityPrefixes; // from top-level const
+
+    const address = getAddressForFisherfolk(person);
+    let municipality = (address?.municipality || person?.municipality || "").toString().trim();
+
+    // normalize common variations (trim, collapse extra spaces)
+    municipality = municipality.replace(/\s+/g, " ").trim();
+
+    // find matching key case-insensitively
+    const muniKey = Object.keys(municipalityPrefixesLocal).find(
+      (k) => k.toLowerCase() === municipality.toLowerCase()
+    );
+
+    const prefix = muniKey ? municipalityPrefixesLocal[muniKey] : "XXX";
+
+    // Registration number raw
+    let reg = (person.registration_number || "").toString().trim();
+
+    // If no reg number, return prefix + placeholder
+    if (!reg) return `${prefix}-UNKNOWN`;
+
+    // If reg already starts with a 3-letter prefix, extract it
+    const match = reg.match(/^([A-Z]{3})-(.+)$/);
+    if (match) {
+      const existingPrefix = match[1];
+      const rest = match[2];
+
+      // If existing prefix is already the correct one => return as-is
+      if (existingPrefix === prefix) {
+        return reg;
+      }
+
+      // If existing prefix appears in our prefixes (reverse lookup), but is different,
+      // replace it with the correct prefix.
+      const knownPrefixes = new Set(Object.values(municipalityPrefixesLocal));
+      if (knownPrefixes.has(existingPrefix)) {
+        return `${prefix}-${rest}`;
+      }
+
+      // Existing prefix isn't a known prefix (could be malformed). Replace it anyway.
       return `${prefix}-${rest}`;
     }
 
-    // Existing prefix isn't a known prefix (could be malformed). Replace it anyway.
-    return `${prefix}-${rest}`;
-  }
-
-  // If no existing prefix, just prepend the correct one
-  return `${prefix}-${reg}`;
-};
+    // If no existing prefix, just prepend the correct one
+    return `${prefix}-${reg}`;
+  };
 
   if (loading) {
     return (
@@ -174,7 +174,7 @@ const getPrefixedRegNumber = (person) => {
           const ta = typeof map[ka] === 'number' ? map[ka] : Number(map[ka]) || 0;
           const tb = typeof map[kb] === 'number' ? map[kb] : Number(map[kb]) || 0;
           if (ta !== tb) return tb - ta;
-        } catch {}
+        } catch { }
       }
       if (a.date_added && b.date_added) return new Date(b.date_added) - new Date(a.date_added);
       return (b.id || 0) - (a.id || 0);
@@ -187,8 +187,15 @@ const getPrefixedRegNumber = (person) => {
   return (
     <div className="h-full bg-gray-50 " style={{ fontFamily: "Montserrat, sans-serif" }}>
       <div className="h-full px-4 py-6" style={{ fontFamily: "Montserrat, sans-serif" }}>
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="Fisherfolk Management" />
+        <div className="flex justify-between items-center ml-2">
+          <div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              FISHERFOLK MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              List of registered fisherfolks in La Union
+            </p>
+          </div>
         </div>
 
         {error && <div className="mb-4 p-4 text-red-700 bg-red-100 rounded-lg">{error}</div>}
@@ -254,50 +261,50 @@ const getPrefixedRegNumber = (person) => {
           <div className="overflow-y-auto max-h-[60vh] rounded-b">
             <table className="w-full divide-y divide-gray-200">
               <thead className="sticky top-0 w-full">
-              <tr style={{ backgroundColor: "#3863CF", fontFamily: "Montserrat, sans-serif" }}>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Registration Number</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Last Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">First Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">MI</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {sorted.length === 0 ? (
-                <tr>
-                  <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No fisherfolk records found</td>
+                <tr style={{ backgroundColor: "#3863CF", fontFamily: "Montserrat, sans-serif" }}>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Registration Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Last Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">First Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">MI</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Action</th>
                 </tr>
-              ) : (
-                paginated
-                  .map((person, index) => (
-                    <tr key={person.id || index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {getPrefixedRegNumber(person)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.last_name || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.first_name || "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.middle_name ? person.middle_name.charAt(0) : "-"}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {person.is_active ? (
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
-                        ) : (
-                          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Inactive</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => navigate(`/admin/fisherfolk/profile/${person.registration_number}`)}
-                          className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md"
-                        >
-                          View Profile
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {sorted.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="px-6 py-4 text-center text-gray-500">No fisherfolk records found</td>
+                  </tr>
+                ) : (
+                  paginated
+                    .map((person, index) => (
+                      <tr key={person.id || index} className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {getPrefixedRegNumber(person)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.last_name || "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.first_name || "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{person.middle_name ? person.middle_name.charAt(0) : "-"}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {person.is_active ? (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Active</span>
+                          ) : (
+                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Inactive</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <button
+                            onClick={() => navigate(`/admin/fisherfolk/profile/${person.registration_number}`)}
+                            className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md"
+                          >
+                            View Profile
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

@@ -31,6 +31,7 @@ import PABirukBilugTracking from '../pages/provincial/BirukBilugTracking'
 import PATrackerManagement from '../pages/provincial/TrackerManagement'
 import PAReportGeneration from '../pages/provincial/ReportGeneration'
 import PAUtility from '../pages/provincial/Utility'
+import PAHelpCenter from '../pages/provincial/HelpCenter'
 
 import MAFisherfolkManagement from '../pages/municipal/FisherfolkManagement'
 import MABoatRegistryManagement from '../pages/municipal/BoatRegistryManagement'
@@ -160,7 +161,7 @@ const AppRoutes = () => {
     <Route path="reportGeneration" element={<PrivateRoute element={< PAReportGeneration/>} />} />
     {/* Provincial Utilities */}
     <Route path="utility" element={<PrivateRoute element={<PAUtility />} />} />
-    <Route path="helpCenter" element={<PrivateRoute element={<HelpCenter />} />} />
+    <Route path="helpCenter" element={<PrivateRoute element={<PAHelpCenter />} />} />
     <Route path="excelImport" element={<PrivateRoute element={<ExcelImport />} />} />
   </Route>
 

@@ -57,7 +57,7 @@ const AdminUserManagement = () => {
         const ta = typeof map[a.id] === 'number' ? map[a.id] : Number(map[a.id]) || 0;
         const tb = typeof map[b.id] === 'number' ? map[b.id] : Number(map[b.id]) || 0;
         if (ta !== tb) return tb - ta; // latest deactivation first
-      } catch {}
+      } catch { }
     }
     return (b.id || 0) - (a.id || 0);
   });
@@ -121,7 +121,7 @@ const AdminUserManagement = () => {
           delete map[selectedUser.id];
         }
         localStorage.setItem('users_last_deactivated', JSON.stringify(map));
-      } catch {}
+      } catch { }
 
       setIsStatusModalOpen(false);
       fetchUsers();
@@ -161,12 +161,15 @@ const AdminUserManagement = () => {
         className="h-full px-4 py-6"
         style={{ fontFamily: "Montserrat, sans-serif" }}
       >
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle
-            value="User Management"
-            className="font-montserrat"
-            style={{ fontFamily: "Montserrat, sans-serif" }}
-          />
+        <div className="flex justify-between items-center">
+          <div className="grid grid-cols-1 grid-rows-2 ml-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              USER MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage users
+            </p>
+          </div>
           <Button
             onClick={() => navigate("/admin/users/add")}
             className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"

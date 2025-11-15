@@ -24,7 +24,7 @@ const StatCard = ({ icon: Icon, title, value, change, gradient }) => (
       {Icon ? (
         <Icon className="w-6 h-6 text-[#3863CF]" aria-hidden="true" />
       ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#3863CF"><path d="m120-420 320-460v460H120Zm153-80h87v-125l-87 125Zm227 80q12-28 26-98t14-142q0-72-13.5-148T500-920q61 18 121.5 67t109 117q48.5 68 79 149.5T840-420H500Zm104-80h148q-17-77-55.5-141T615-750q2 21 3.5 43.5T620-660q0 47-4.5 87T604-500ZM360-200q-36 0-67-17t-53-43q-14 15-30.5 28T173-211q-35-26-59.5-64.5T80-360h800q-9 46-33.5 84.5T787-211q-20-8-36.5-21T720-260q-23 26-53.5 43T600-200q-36 0-67-17t-53-43q-22 26-53 43t-67 17ZM80-40v-80h40q32 0 62.5-10t57.5-30q27 20 57.5 29.5T360-121q32 0 62-9.5t58-29.5q27 20 57.5 29.5T600-121q32 0 62-9.5t58-29.5q28 20 58 30t62 10h40v80h-40q-31 0-61-7.5T720-70q-29 15-59 22.5T600-40q-31 0-61-7.5T480-70q-29 15-59 22.5T360-40q-31 0-61-7.5T240-70q-29 15-59 22.5T120-40H80Zm280-460Zm244 0Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#3863CF"><path d="m120-420 320-460v460H120Zm153-80h87v-125l-87 125Zm227 80q12-28 26-98t14-142q0-72-13.5-148T500-920q61 18 121.5 67t109 117q48.5 68 79 149.5T840-420H500Zm104-80h148q-17-77-55.5-141T615-750q2 21 3.5 43.5T620-660q0 47-4.5 87T604-500ZM360-200q-36 0-67-17t-53-43q-14 15-30.5 28T173-211q-35-26-59.5-64.5T80-360h800q-9 46-33.5 84.5T787-211q-20-8-36.5-21T720-260q-23 26-53.5 43T600-200q-36 0-67-17t-53-43q-22 26-53 43t-67 17ZM80-40v-80h40q32 0 62.5-10t57.5-30q27 20 57.5 29.5T360-121q32 0 62-9.5t58-29.5q27 20 57.5 29.5T600-121q32 0 62-9.5t58-29.5q28 20 58 30t62 10h40v80h-40q-31 0-61-7.5T720-70q-29 15-59 22.5T600-40q-31 0-61-7.5T480-70q-29 15-59 22.5T360-40q-31 0-61-7.5T240-70q-29 15-59 22.5T120-40H80Zm280-460Zm244 0Z" /></svg>
       )}
     </div>
   </div>
@@ -65,96 +65,113 @@ const ProvincialDashboard = () => {
     fetchDashboardData();
   }, [startDate, endDate]);
 
-    if (loading) return <LoaderFullScreen />;
+  if (loading) return <LoaderFullScreen />;
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        <PageTitle value="Dashboard" />
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
+    <div className="bg-gray-50 min-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+      <div className="max-w-7xl mx-auto">
+
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div className="grid grid-cols-1 grid-rows-1">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              DASHBOARD
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Overview and quick statistics
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 grid-rows-1 mt-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium">Date Range:</p>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
+              />
+              <span className="text-gray-500 text-sm">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
+              />
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {startDate && endDate
+                ? `Showing data from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`
+                : "Showing all available data"}
+            </p>
+          </div>
+        </div>
+
+        {/* StatCards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mt-5">
+          <StatCard
+            icon={FaUserFriends}
+            title="Active Fisherfolk"
+            value={stats?.fisherfolk.active || 0}
+            change={stats?.fisherfolk.change || 0}
+            gradient="bg-gradient-to-r from-blue-500 to-blue-600"
           />
-          <span className="text-gray-500 text-sm">to</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
+          <StatCard
+            icon={FaShip}
+            title="Active Boats"
+            value={stats?.boats.active || 0}
+            change={stats?.boats.change || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
+          />
+          <StatCard
+            icon={FaUserFriends}
+            title="Total Fisherfolk"
+            value={stats?.fisherfolk.total || 0}
+            gradient="bg-gradient-to-r from-blue-500 to-blue-600"
+          />
+          <StatCard
+            icon={FaShip}
+            title="Total Boats"
+            value={stats?.boats.total || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
           />
         </div>
-      </div>
 
-
-    {/* StatCards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-        <StatCard
-          icon={FaUserFriends}
-          title="Active Fisherfolk"
-          value={stats?.fisherfolk.active || 0}
-          change={stats?.fisherfolk.change || 0}
-          gradient="bg-gradient-to-r from-blue-500 to-blue-600"
-        />
-        <StatCard
-          icon={FaShip}
-          title="Active Boats"
-          value={stats?.boats.active || 0}
-          change={stats?.boats.change || 0}
-          gradient="bg-gradient-to-r from-blue-400 to-blue-500"
-        />
-        <StatCard
-          icon={FaUserFriends}
-          title="Total Fisherfolk"
-          value={stats?.fisherfolk.total || 0}
-          gradient="bg-gradient-to-r from-blue-500 to-blue-600"
-        />
-        <StatCard
-          icon={FaShip}
-          title="Total Boats"
-          value={stats?.boats.total || 0}
-          gradient="bg-gradient-to-r from-blue-400 to-blue-500"
-        />
-      </div>
-
-  {/* Charts & Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-none">
+        {/* Charts & Quick Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-4 mt-5">
         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
-          <p className="text-sm text-gray-600 mb-2">Count of fisherfolk by sex</p>
-          <SexOverall />
-        </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
+              <p className="text-sm text-gray-600 mb-2">Fisherfolk registered by sex</p>
+              <SexOverall startDate={startDate} endDate={endDate} />
+            </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Main Source of Income</h3>
-          <p className="text-sm text-gray-600 mb-2">Fisherfolk by primary livelihood</p>
-          <MainSourceIncome />
-        </div>
-        
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Main Source of Income</h3>
+              <p className="text-sm text-gray-600 mb-2">Fisherfolk registered by main livelihood</p>
+              <MainSourceIncome startDate={startDate} endDate={endDate} />
+            </div>
 
-         <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Boats by Municipality</h3>
-          <p className="text-sm text-gray-600 mb-2">Registered boats grouped by municipality</p>
-          <Boat_Municipality />
-        </div>
+                        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center items-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Tracker Status</h3>
+              <p className="text-sm text-gray-600 mb-2">Trackers created, assigned vs unassigned</p>
+              <TrackerDonutStat startDate={startDate} endDate={endDate} />
+            </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center items-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Tracker Status</h3>
-          <p className="text-sm text-gray-600 mb-2">Active vs inactive tracking devices</p>
-          <TrackerDonutStat />
-        </div>
+          <div className="bg-white rounded-2xl shadow-lg p-5 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl xl:col-span-2">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Boats by Municipality</h3>
+              <p className="text-sm text-gray-600 mb-2">Boats registered by municipality & type</p>
+              <Boat_Municipality startDate={startDate} endDate={endDate} />
+            </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
-          <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
-          <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
+            <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
+              <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
+              <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
+            </div>
+          </div>
         </div>
       </div>
-    </div>
   );
 };
 

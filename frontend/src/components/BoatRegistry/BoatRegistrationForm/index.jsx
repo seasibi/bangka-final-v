@@ -527,7 +527,12 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (currentStep < steps.length - 1) {
+
+    // We have 3 logical steps in renderStep: 0, 1, and 2 (review/confirmation).
+    // Only when we're on the last logical step (2) should we show the confirm modal.
+    const LAST_STEP_INDEX = 2;
+
+    if (currentStep < LAST_STEP_INDEX) {
       handleNext();
       return;
     }

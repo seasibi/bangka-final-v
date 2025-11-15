@@ -9,17 +9,18 @@ const AdminBirukBilugTracking = () => {
   const [boundaryType, setBoundaryType] = React.useState("water");
   const [searchMfbr, setSearchMfbr] = React.useState("");
   return (
-    <div
-      className="h-full bg-gray-50"
-      style={{ fontFamily: "Montserrat, sans-serif" }}
-    >
-      <div
-        className="h-full px-4 py-7"
-        style={{ fontFamily: "Montserrat, sans-serif" }}
-      >
+    <div className="h-full bg-gray-50" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <div className="h-full px-4 py-7" style={{ fontFamily: "Montserrat, sans-serif" }}>
         {/* Page Title */}
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="BirukBilug Tracking" />
+        <div className="flex justify-between items-center">
+<div className="grid grid-cols-1 grid-rows-2 ml-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-3" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              BIRUKBILUG TRACKING MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage BirukBilug trackers
+            </p>
+          </div>
 
           <div className="flex gap-3 items-center">
             {/* Search by MFBR */}

@@ -125,21 +125,21 @@ const AdminBoatRegistryManagement = () => {
   };
 
   const handleAssignClick = async (mfbrNumber) => {
-  const boat = boats.find(b => b.mfbr_number === mfbrNumber);
-  if (boat) {
-    setSelectedAssignBoat(boat);
-    try {
-      const allTrackers = await getTrackers();
-      const mun = boat?.fisherfolk?.address?.municipality || boat?.fisherfolk?.municipality || '';
-      const available = (Array.isArray(allTrackers) ? allTrackers : allTrackers?.results || [])
-        .filter(t => t.status === 'available' && (!mun || muniEq(t.municipality, mun)));
-      setAssignTrackers(available);
-      setIsAssignModalOpen(true);
-    } catch {
-      setError('Failed to fetch trackers');
+    const boat = boats.find(b => b.mfbr_number === mfbrNumber);
+    if (boat) {
+      setSelectedAssignBoat(boat);
+      try {
+        const allTrackers = await getTrackers();
+        const mun = boat?.fisherfolk?.address?.municipality || boat?.fisherfolk?.municipality || '';
+        const available = (Array.isArray(allTrackers) ? allTrackers : allTrackers?.results || [])
+          .filter(t => t.status === 'available' && (!mun || muniEq(t.municipality, mun)));
+        setAssignTrackers(available);
+        setIsAssignModalOpen(true);
+      } catch {
+        setError('Failed to fetch trackers');
+      }
     }
-  }
-};
+  };
 
   const handleArchiveConfirm = async () => {
     if (!selectedBoat) return;
@@ -163,9 +163,9 @@ const AdminBoatRegistryManagement = () => {
 
   if (loading) {
     return (
-     <div className="p-4">
+      <div className="p-4">
         <div className="flex justify-center items-center h-64">
-          <Loader/>
+          <Loader />
         </div>
       </div>
     );
@@ -191,7 +191,7 @@ const AdminBoatRegistryManagement = () => {
         const ta = typeof map[ka] === 'number' ? map[ka] : Number(map[ka]) || 0;
         const tb = typeof map[kb] === 'number' ? map[kb] : Number(map[kb]) || 0;
         if (ta !== tb) return tb - ta;
-      } catch {}
+      } catch { }
     }
     if (a.date_added && b.date_added) return new Date(b.date_added) - new Date(a.date_added);
     return (b.id || 0) - (a.id || 0);
@@ -206,10 +206,17 @@ const AdminBoatRegistryManagement = () => {
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full px-4 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="Boat Registry Management" />
+        <div className="flex justify-between items-center">
+          <div className="grid grid-cols-1 grid-rows-2 ml-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              BOAT REGISTRY MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage boat records
+            </p>
+          </div>
           <Button onClick={handleAddBoat}
-          style={{ backgroundColor: '#3863CF', fontFamily: 'Montserrat, sans-serif' }}>Add New Boat</Button>
+            style={{ backgroundColor: '#3863CF', fontFamily: 'Montserrat, sans-serif' }}>Add New Boat</Button>
         </div>
 
         {error && (
@@ -274,36 +281,36 @@ const AdminBoatRegistryManagement = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-          <tbody className="divide-y divide-gray-200">
-            {paginatedRows.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="px-6 py-4 text-center text-gray-500">No boats found</td>
-              </tr>
-            ) : (
-              paginatedRows.map((boat, index) => {
-                const rowIndex = start + index;
-                const fisherfolkActive = boat.fisherfolk?.is_active ?? true;
-                return (
-                  <tr key={boat.mfbr_number || rowIndex} className={`${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.mfbr_number}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${boat.boat_type === 'Motorized' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{boat.boat_type}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.tracker ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">Tracker {boat.tracker.BirukBilugID}</span> : <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded-full text-xs">No tracker assigned</span>}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.fisherfolk ? `${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.last_name || ''}` : 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${boat.is_active === true ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{boat.is_active === true ? 'Active' : 'Inactive'}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm flex gap-2">
-                      {fisherfolkActive ? (
-                        <button onClick={() => navigate(`/admin/boat-registry/profile/${boat.mfbr_number}`)} className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md">View Boat Profile</button>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
+            <tbody className="divide-y divide-gray-200">
+              {paginatedRows.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="px-6 py-4 text-center text-gray-500">No boats found</td>
+                </tr>
+              ) : (
+                paginatedRows.map((boat, index) => {
+                  const rowIndex = start + index;
+                  const fisherfolkActive = boat.fisherfolk?.is_active ?? true;
+                  return (
+                    <tr key={boat.mfbr_number || rowIndex} className={`${rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.mfbr_number}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${boat.boat_type === 'Motorized' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{boat.boat_type}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.tracker ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">Tracker {boat.tracker.BirukBilugID}</span> : <span className="bg-gray-100 text-gray-500 px-2 py-1 rounded-full text-xs">No tracker assigned</span>}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{boat.fisherfolk ? `${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.last_name || ''}` : 'N/A'}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${boat.is_active === true ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{boat.is_active === true ? 'Active' : 'Inactive'}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm flex gap-2">
+                        {fisherfolkActive ? (
+                          <button onClick={() => navigate(`/admin/boat-registry/profile/${boat.mfbr_number}`)} className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md">View Boat Profile</button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
           </table>
         </div>
 
@@ -351,7 +358,7 @@ const AdminBoatRegistryManagement = () => {
               )
           }
           confirmText={assignTrackers.length === 0 ? "" : "Assign"}
-  cancelText="Cancel"
+          cancelText="Cancel"
         />
 
       </div>

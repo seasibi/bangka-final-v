@@ -210,10 +210,16 @@ const FisherfolkManagement = () => {
 
   return (
     <div className="h-full bg-gray-50 " style={{ fontFamily: "Montserrat, sans-serif" }}>
-      <div className="h-full px-4 py-6" style={{ fontFamily: "Montserrat, sans-serif" }}>
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="Fisherfolk Management" />
-          <Button
+      <div className="h-full px-4 py-6 ml-2" style={{ fontFamily: "Montserrat, sans-serif" }}>
+        <div className="flex justify-between items-center">
+<div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              FISHERFOLK MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage fisherfolk records
+            </p>
+          </div>          <Button
             onClick={() => navigate("/admin/fisherfolk/add")}
             className="text-white px-6 py-2 rounded-md"
             style={{ backgroundColor: "#3863CF", fontFamily: "Montserrat, sans-serif" }}

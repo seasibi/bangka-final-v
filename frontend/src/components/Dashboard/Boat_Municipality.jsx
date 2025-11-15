@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import ReactApexChart from "react-apexcharts";
 import { getBoats } from "../../services/boatService";
 
-const Boat_Municipality = () => {
+const Boat_Municipality = ({ startDate, endDate }) => {
+
   const [series, setSeries] = useState([]);
   const [categories, setCategories] = useState([]);
 
   useEffect(() => {
+
     const fetchData = async () => {
       try {
         console.log('[Boat_Municipality] Fetching boats...');
@@ -14,12 +16,26 @@ const Boat_Municipality = () => {
         const boatsList = await getBoats();
         console.log('[Boat_Municipality] boatsList:', boatsList);
 
+        // Filter by date range if provided
+        let filteredBoats = Array.isArray(boatsList) ? boatsList : [];
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          filteredBoats = filteredBoats.filter((b) => {
+            const createdDate = new Date(b.date_added || b.created_at);
+            return createdDate >= start && createdDate <= end;
+          });
+        }
+
         // 2. Build records: { municipality (from boat.fisherfolk.address), boat_type }
         // Log all boat_type values for debugging
-        boatsList.forEach(boat => {
+        filteredBoats.forEach(boat => {
+
           console.log('[Boat_Municipality] boat_type raw:', boat?.boat_type);
         });
-        const records = boatsList.map(boat => {
+        const records = filteredBoats.map(boat => {
+
           const municipality = boat?.fisherfolk?.address?.municipality;
           // Normalize boat_type for comparison
           const boat_type = typeof boat?.boat_type === 'string' ? boat.boat_type.trim().toLowerCase() : '';
@@ -68,7 +84,7 @@ const Boat_Municipality = () => {
     };
 
     fetchData();
-  }, []);
+  }, [startDate, endDate]);
 
   // Calculate max value for y-axis range
   const allCounts = [...(series[0]?.data || []), ...(series[1]?.data || [])];
@@ -130,9 +146,19 @@ const Boat_Municipality = () => {
     console.log('[Boat_Municipality] Render: categories=', categories, 'series=', series);
   }, [categories, series]);
 
+  const hasData =
+    Array.isArray(series) &&
+    series.length > 0 &&
+    series.some((s) => Array.isArray(s.data) && s.data.some((v) => v > 0));
+
   return (
-    <div>
-      <ReactApexChart options={options} series={series} type="bar" height={350} />
+    <div className="space-y-2">
+      {!hasData ? (
+        <div className="text-center text-gray-500 text-sm">No boat registration data for the selected date range.</div>
+      ) : (
+        <ReactApexChart options={options} series={series} type="bar" height={350} />
+      )}
+      <p className="text-xs text-gray-500">Blue: Motorized • Light blue: Non-motorized</p>
     </div>
   );
 };

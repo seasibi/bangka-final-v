@@ -80,14 +80,22 @@ const MunicipalDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-      <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-            <PageTitle value="Dashboard" />
-            <p className="text-sm text-gray-600">Overview and quick statistics</p>
-          </div>
+    <div className="bg-gray-50 min-h-screen px-4 md:px-6 py-6 font-sans" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+        <div className="grid grid-cols-1 grid-rows-1">
+          <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            DASHBOARD
+          </h1>
+          <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+            Overview and quick statistics
+          </p>
+        </div>
+        
+          <div className="grid grid-cols-1 grid-rows-1 mt-1">
           <div className="flex items-center gap-2">
+            <p className="font-medium">Date Range:</p>
             <input
               type="date"
               value={startDate}
@@ -102,67 +110,64 @@ const MunicipalDashboard = () => {
               className="text-sm rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200"
             />
           </div>
-        </div>
-
-        {/* StatCards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-          <StatCard
-            icon={FaUserFriends}
-            title="Active Fisherfolk"
-            value={stats?.fisherfolk.active || 0}
-            change={stats?.fisherfolk.change || 0}
-            gradient="bg-gradient-to-r from-blue-500 to-blue-600"
-          />
-          <StatCard
-            icon={FaShip}
-            title="Active Boats"
-            value={stats?.boats.active || 0}
-            change={stats?.boats.change || 0}
-            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
-          />
-          <StatCard
-            icon={FaUserFriends}
-            title="Total Fisherfolk"
-            value={stats?.fisherfolk.total || 0}
-            gradient="bg-gradient-to-r from-blue-500 to-blue-600"
-          />
-          <StatCard
-            icon={FaShip}
-            title="Total Boats"
-            value={stats?.boats.total || 0}
-            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
-          />
-        </div>
-
-        {/* Charts & Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-none">
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
-            <p className="text-sm text-gray-600 mb-2">Count of fisherfolk by sex</p>
-            <SexOverall />
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Main Source of Income</h3>
-            <p className="text-sm text-gray-600 mb-2">Fisherfolk by primary livelihood</p>
-            <MainSourceIncome />
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Boat Types</h3>
-            <p className="text-sm text-gray-600 mb-2">Motorized vs non-motorized</p>
-            <BoatTypesChart />
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Livelihood Breakdown</h3>
-            <p className="text-sm text-gray-600 mb-2">Distribution by livelihood categories</p>
-            <LivelihoodBreakdownChart />
-          </div>
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
-            <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
-            <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
-          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {startDate && endDate
+              ? `Showing data from ${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`
+              : "Showing all available data"}
+          </p>
         </div>
       </div>
+
+      {/* Top Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mt-5">
+        <StatCard
+          icon={FaUserFriends}
+          title="Active Fisherfolk"
+          value={stats?.fisherfolk.active || 0}
+          change={stats?.fisherfolk.change || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
+        />
+        <StatCard
+          icon={FaShip}
+          title="Active Boats"
+          value={stats?.boats.active || 0}
+          change={stats?.boats.change || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
+        />
+        <StatCard
+          icon={FaUserFriends}
+          title="Total Fisherfolk"
+          value={stats?.fisherfolk.total || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
+        />
+        <StatCard
+          icon={FaShip}
+          title="Total Boats"
+          value={stats?.boats.total || 0}
+            gradient="bg-gradient-to-r from-blue-400 to-blue-500"
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 flex-none">
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Sex Distribution</h3>
+          <p className="text-sm text-gray-600 mb-2">Fisherfolk registered by sex</p>
+          <SexOverall startDate={startDate} endDate={endDate} />
+        </div>
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Livelihood Breakdown</h3>
+          <p className="text-sm text-gray-600 mb-2">Distribution by livelihood categories</p>
+          <LivelihoodBreakdownChart />
+        </div>
+        <div className="bg-white rounded-2xl shadow-lg p-4 flex flex-col justify-center transform transition-all hover:-translate-y-1 hover:shadow-2xl">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Violations by Municipality</h3>
+          <p className="text-sm text-gray-600 mb-2">Reported violations across municipalities</p>
+          <ViolationsByMunicipality startDate={startDate} endDate={endDate} />
+        </div>
+      </div>
+    </div>
+    </div>
   );
 }
 
