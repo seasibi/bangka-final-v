@@ -29,6 +29,44 @@ const normalizeMunicipality = (name) => {
 };
 const muniEq = (a, b) => normalizeMunicipality(a) === normalizeMunicipality(b);
 
+// Simple pagination controls (mirrors FisherfolkManagement)
+const PaginationControls = ({ page, setPage, pageSize, total }) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pages = [];
+  for (let i = 1; i <= totalPages; i++) pages.push(i);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => setPage((p) => Math.max(1, p - 1))}
+        disabled={page <= 1}
+        className="px-2 py-1 border rounded disabled:opacity-50"
+      >
+        Prev
+      </button>
+      <div className="hidden sm:flex items-center gap-1">
+        {pages.slice(0, 10).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPage(p)}
+            className={`px-2 py-1 rounded ${p === page ? 'bg-blue-600 text-white' : 'border'}`}
+          >
+            {p}
+          </button>
+        ))}
+        {totalPages > 10 && <span className="px-2">...</span>}
+      </div>
+      <button
+        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+        disabled={page >= totalPages}
+        className="px-2 py-1 border rounded disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  );
+};
+
 const MABoatRegistryManagement = () => {
   const [boats, setBoats] = useState([]);
   const [fisherfolk, setFisherfolk] = useState([]);
@@ -44,6 +82,9 @@ const MABoatRegistryManagement = () => {
   const navigate = useNavigate();
   const { user } = useAuth(); // ✅ get user info including municipality
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const pageOptions = [25, 52, 100];
 
   useEffect(() => {
     if (user?.municipality) {
@@ -71,9 +112,35 @@ const MABoatRegistryManagement = () => {
     }
   };
 
-  const handleAddBoat = () => navigate('/admin/boat-registry/add');
-  const handleEditBoat = (boatId) => navigate(`/admin/boat-registry/edit/${boatId}`);
+// Reset page when dataset or pageSize changes
+  useEffect(() => {
+    setPage(1);
+  }, [boats.length, pageSize]);
 
+  // Sort to match BoatList ordering, then slice for pagination
+  const sortedBoats = [...boats].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+    if (!a.is_active && !b.is_active) {
+      try {
+        const map = JSON.parse(localStorage.getItem('ff_last_deactivated') || '{}');
+        const ka = a.fisherfolk?.registration_number || a.fisherfolk?.id;
+        const kb = b.fisherfolk?.registration_number || b.fisherfolk?.id;
+        const ta = typeof map[ka] === 'number' ? map[ka] : Number(map[ka]) || 0;
+        const tb = typeof map[kb] === 'number' ? map[kb] : Number(map[kb]) || 0;
+        if (ta !== tb) return tb - ta;
+      } catch {}
+    }
+    return new Date(b.date_added) - new Date(a.date_added);
+  });
+  const total = sortedBoats.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const paginatedBoats = sortedBoats.slice(start, start + pageSize);
+
+  const handleAddBoat = () => navigate('/municipal_agriculturist/boat-registry/add');
+  const handleEditBoat = (boatId) => navigate(`/municipal_agriculturist/boat-registry/edit/${boatId}`);
+  
   const handleArchiveClick = (boatregId) => {
     const boat = boats.find(b => b.boat_registry_no === boatregId);
     if (boat) {
@@ -105,7 +172,7 @@ const MABoatRegistryManagement = () => {
       await archiveFisherfolkBoat(selectedBoat.boat_registry_no);
       setSuccess(`Boat "${selectedBoat.boat_name}" has been archived.`);
       setIsArchiveModalOpen(false);
-  await fetchBoats(user?.municipality);
+      await fetchBoats(user?.municipality);
       setTimeout(() => setSuccess(null), 3000);
     } catch {
       setError('Failed to archive boat');
@@ -125,8 +192,15 @@ const MABoatRegistryManagement = () => {
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full px-4 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        <div className="flex justify-between items-center mb-6">
-          <PageTitle value="Boat Registry Management" />
+        <div className="flex justify-between items-center ml-2">
+          <div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              BOAT REGISTRY MANAGEMENT
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              List of registered boats in La Union
+            </p>
+          </div>          
           <Button
             onClick={handleAddBoat}
             style={{ backgroundColor: '#3863CF', fontFamily: 'Montserrat, sans-serif' }}
@@ -139,11 +213,30 @@ const MABoatRegistryManagement = () => {
         {success && <div className="mb-4 p-4 text-green-700 bg-green-100 rounded-lg">{success}</div>}
 
         <BoatList
-          boats={boats}
+        boats={paginatedBoats}
           fisherfolk={fisherfolk}
           onEdit={handleEditBoat}
-          onArchive={handleArchiveClick}
-          onAssign={handleAssignClick}
+          profileBasePath="/municipal_agriculturist"
+          controls={
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-700">Rows per page:</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  {pageOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                <div className="text-sm text-gray-600">Total: {total}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <PaginationControls page={currentPage} setPage={setPage} pageSize={pageSize} total={total} />
+              </div>
+            </div>
+          }
         />
 
         <Modal

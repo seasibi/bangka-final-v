@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { apiClient } from "../../services/api_urls";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { logActivity } from '../../utils/activityLog';
 import Modal from "../../components/Modal";
 import SuccessModal from "../../components/SuccessModal";
@@ -41,7 +41,7 @@ const Info = ({ label, value }) => (
   </div>
 );
 
-const FisherfolkProfile = () => {
+const FisherfolkProfile = ({ editPathBuilder }) => {
   const { id } = useParams();
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -245,7 +245,7 @@ const FisherfolkProfile = () => {
       doc.setFontSize(10);
       const footerY = pageHeight - 24;
       const dateLine = `Date generated: ${new Date().toLocaleDateString()}`;
-      const copyLine = `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`;
+      const copyLine = `  ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`;
       doc.text(dateLine, pageWidth / 2, footerY - 12, { align: 'center' });
       doc.text(copyLine, pageWidth / 2, footerY, { align: 'center' });
     };
@@ -564,7 +564,11 @@ const FisherfolkProfile = () => {
   };
 
   const handleEditConfirm = () => {
-    navigate(`/admin/fisherfolk/edit/${fisherfolk.registration_number}`);
+    const buildEditPath =
+      typeof editPathBuilder === "function"
+        ? editPathBuilder
+        : (reg) => `/admin/fisherfolk/edit/${reg}`;
+    navigate(buildEditPath(fisherfolk.registration_number));
   };
 
   if (loading) return <Loader />;
@@ -914,9 +918,21 @@ const FisherfolkProfile = () => {
       <AnimatePresence>
         {isStatusModalOpen && (
           <>
-            <div className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
+            />
             <div className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none">
-              <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 14 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 10 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 22, mass: 0.9 }}
+                className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto"
+              >
                 <h2 className="text-lg font-semibold mb-2">
                   {fisherfolk?.is_active ? "Deactivate Fisherfolk" : "Activate Fisherfolk"}
                 </h2>
@@ -931,7 +947,7 @@ const FisherfolkProfile = () => {
                     {fisherfolk?.is_active ? "Deactivate" : "Activate"}
                   </button>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </>
         )}
@@ -950,9 +966,21 @@ const FisherfolkProfile = () => {
       <AnimatePresence>
         {isEditModalOpen && (
           <>
-            <div className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm" />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
+            />
             <div className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none">
-              <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.92, y: 14 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 10 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 22, mass: 0.9 }}
+                className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto"
+              >
                 <h2 className="text-lg font-semibold mb-2">Edit Fisherfolk</h2>
                 <p className="mb-4">
                   {`Edit ${fisherfolk?.first_name} ${fisherfolk?.last_name}'s info?`}
@@ -961,7 +989,7 @@ const FisherfolkProfile = () => {
                   <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
                   <button onClick={handleEditConfirm} className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700">Continue</button>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </>
         )}

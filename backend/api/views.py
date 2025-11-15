@@ -27,6 +27,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .permissions import IsAdmin, IsSelfOrAdmin, IsAdminOrAgriReadOnly
 import pandas as pd
 from rest_framework.parsers import MultiPartParser, FormParser
+from io import BytesIO
 
 # TOKEN
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -2549,17 +2550,17 @@ class ImportFisherfolkExcelView(APIView):
             return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            df = pd.read_excel(file_obj)
+            df = _read_uploaded_table(file_obj)
         except Exception as e:
             return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Get default admin user for created_by
+        # Get default admin user for created_by
         User = get_user_model()
         default_user = User.objects.filter(is_superuser=True).first()
         if not default_user:
             return Response({"error": "No superuser found. Please create an admin user first."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Required columns
+        # Required columns
         required_columns = [
             "registration_number", "salutations", "last_name", "first_name", "middle_name",
             "appelation", "birth_date", "age", "birth_place", "civil_status", "sex",
@@ -2567,7 +2568,7 @@ class ImportFisherfolkExcelView(APIView):
             "fishing_ground", "fma_number", "religion", "educational_background",
             "household_month_income", "other_source_income", "farming_income",
             "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-            "with_voterID", "voterID_number", "is_CCT_4ps", "is_ICC", "main_source_livelihood",
+            "with_voterID", "voterID_number",  "is_CCT_4ps", "is_ICC", "main_source_livelihood",
             "other_source_livelihood", "street", "barangay", "municipality", "province",
             "region", "residency_years", "barangay_verifier", "position", "verified_date",
             "contact_fname", "contact_mname", "contact_lname", "contact_relationship", "contact_contactno",
@@ -2576,7 +2577,7 @@ class ImportFisherfolkExcelView(APIView):
             "no_unemployed", "org_name", "member_since", "org_position"
         ]
 
-        # ✅ Check missing columns
+        # Check missing columns
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             return Response(
@@ -2630,7 +2631,7 @@ class ImportFisherfolkExcelView(APIView):
 
             serializer = FisherfolkSerializer(data=fisherfolk_core)
             if serializer.is_valid():
-                fisherfolk = serializer.save(created_by=default_user)  # ✅ only here
+                fisherfolk = serializer.save(created_by=default_user)  # only here
                 imported += 1
 
                 # --- Related models (no user field here) ---
@@ -2668,7 +2669,85 @@ class ImportFisherfolkExcelView(APIView):
 
         return Response({"imported": imported, "errors": []}, status=status.HTTP_200_OK)
 
+# --- Import Boat Excel API ---
+class ImportBoatExcelView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
 
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get("file")
+        if not file_obj:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = _read_uploaded_table(file_obj)
+        except Exception as e:
+            return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        required_columns = [
+            "mfbr_number", "application_date", "type_of_registration", "fisherfolk_registration_number",
+            "type_of_ownership", "boat_name", "boat_type", "fishing_ground", "fma_number",
+            "built_place", "no_fishers", "material_used", "homeport", "built_year",
+            "engine_make", "serial_number", "horsepower", "registered_municipality"
+        ]
+
+        missing = [c for c in required_columns if c not in df.columns]
+        if missing:
+            return Response({"error": "Missing columns", "missing_columns": missing}, status=status.HTTP_400_BAD_REQUEST)
+
+        imported, errors = 0, []
+        for idx, row in df.iterrows():
+            # Build dict and coerce types
+            data = {col: row[col] for col in required_columns}
+
+            # Clean strings
+            for key in [
+                "mfbr_number","type_of_registration","fisherfolk_registration_number","type_of_ownership",
+                "boat_name","boat_type","fishing_ground","fma_number","built_place","material_used",
+                "homeport","engine_make","serial_number","horsepower","registered_municipality"
+            ]:
+                if data.get(key) is not None and not pd.isna(data.get(key)):
+                    data[key] = str(data[key]).strip()
+                else:
+                    data[key] = None
+
+            # Dates
+            try:
+                val = row["application_date"]
+                if hasattr(val, "strftime"):
+                    data["application_date"] = val.strftime("%Y-%m-%d")
+                else:
+                    parsed = pd.to_datetime(val, errors="coerce")
+                    if pd.notnull(parsed):
+                        data["application_date"] = parsed.strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+            # Integers
+            def _to_int(v):
+                try:
+                    if pd.isna(v) or v == "":
+                        return None
+                    return int(str(v).split(".")[0])
+                except Exception:
+                    return None
+            data["no_fishers"] = _to_int(row.get("no_fishers"))
+            data["built_year"] = _to_int(row.get("built_year"))
+
+            # Submit to serializer
+            serializer = BoatSerializer(data=data)
+            if serializer.is_valid():
+                try:
+                    serializer.save()
+                    imported += 1
+                except Exception as e:
+                    errors.append({"row": idx + 2, "errors": str(e)})
+            else:
+                errors.append({"row": idx + 2, "errors": serializer.errors})
+
+        status_code = status.HTTP_200_OK if not errors else status.HTTP_400_BAD_REQUEST
+        return Response({"imported": imported, "errors": errors}, status=status_code)
+
+        
 # Municipality Management ViewSets
 class MunicipalityViewSet(viewsets.ModelViewSet):
     queryset = Municipality.objects.all()

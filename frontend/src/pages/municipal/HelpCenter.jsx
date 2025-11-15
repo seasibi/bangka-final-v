@@ -304,12 +304,11 @@ const HelpCenter = () => {
   })
 
   return (
-    <div className="bg-gray-50 max-h-screen px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+    <div className="bg-gray-50 px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <div className="mb-4">
-        <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" backTo="/admin/utility" />
+        <PageHeader title="Help Center" subtitle="Guides, FAQs, and support" backTo="/municipal_agriculturist/utility" />
       </div>
 
-    <div className=" bg-white rounded-lg shadow overflow-y-auto h-[50vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] xl:h-[70vh] 2xl:h-[72vh] w-full overflow-x-hidden">     
       {/* Search Bar */}
       <div className="mb-8">
         <div className="relative max-w-2xl">
@@ -515,7 +514,6 @@ const HelpCenter = () => {
     </div>    
 
 
-    </div>
   );
 };
 

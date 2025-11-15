@@ -33,13 +33,13 @@ const DashboardHelp = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-5" style={{ fontFamily: "Montserrat, sans-serif" }}> Cards </h1>
             <ol className="list-decimal">
               <li className="mb-2 ml-5"><strong>Active Fisherfolk</strong> — shows the number of fisherfolk currently marked as active, including a small percentage change indicator.</li>
-              <img src={dimg1} alt="Active Fisherfolk" className="my-3 rounded border" />
+              <img src={dimg1} alt="Active Fisherfolk" className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm" />
               <li className="mb-2 ml-5"><strong>Active Boats</strong> — shows the number of boats currently marked as active, including a percentage change indicator.</li>
-              <img src={dimg2} className="my-3 rounded border"></img>
+              <img src={dimg2} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
               <li className="mb-2 ml-5"><strong>Total Fisherfolk</strong> — shows the total registered fisherfolk in the system.</li>
-              <img src={dimg3} className="my-3 rounded border"></img>
+              <img src={dimg3} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
               <li className="mb-2 ml-5"><strong>Total Boats</strong> — shows the total registered boats in the system.</li>
-              <img src={dimg4} className="my-3 rounded border"></img>
+              <img src={dimg4} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
             </ol>
           </div>
 
@@ -47,9 +47,9 @@ const DashboardHelp = () => {
             <h1 className="text-2xl font-bold text-gray-900 mb-5" style={{ fontFamily: "Montserrat, sans-serif" }}> Charts </h1>
             <ol className="list-decimal">
               <li className="mb-2 ml-5"><strong>Sex Distribution</strong> — bar chart of fisherfolk counts by sex.</li>
-              <img src={dimg5} className="my-3 rounded border"></img>
+              <img src={dimg5} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
               <li className="mb-2 ml-5"><strong>Boats by Municipality</strong> — column chart showing the number of boats per municipality.</li>
-              <img src={dimg6} className="my-3 rounded border"></img>
+              <img src={dimg6} className="my-4 w-full max-w-3xl mx-auto rounded-xl border border-gray-200 shadow-sm"></img>
               <li className="mb-2 ml-5"><strong>Tracker Assignment</strong> — donut chart indicating the count of boats with GPS trackers <em>(Assigned)</em> versus those without <em>(Unassigned)</em>.</li>
               <li className="mb-2 ml-5"><strong>Violations by Municipality</strong> — panel that lists total violations aggregated by municipality and respects the selected date range.</li>
             </ol>

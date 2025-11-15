@@ -269,7 +269,7 @@ const AddFisherfolk = () => {
               }
             }
           }
-          navigate("/admin/boat-registry/add", {
+          navigate("/municipal_agriculturist/boat-registry/add", {
             state: {
               fisherfolk: {
                 ...createdFisherfolk,
