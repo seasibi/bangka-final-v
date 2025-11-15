@@ -5,13 +5,14 @@ from django.http import HttpResponse, JsonResponse
 from django.conf import settings
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsAdmin
 from django.core.files.storage import default_storage
 import json
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated, IsAdmin])
 def create_backup(request):
     """
     Create a database backup using mysqldump
@@ -97,7 +98,7 @@ def create_backup(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated, IsAdmin])
 def restore_backup(request):
     """
     Smart restore: Analyzes backup and imports only new/missing data without dropping database
@@ -362,7 +363,7 @@ def restore_backup(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated, IsAdmin])
 def backup_history(request):
     """
     Get list of available backups
