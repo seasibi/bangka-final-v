@@ -2559,116 +2559,253 @@ class ImportFisherfolkExcelView(APIView):
         if not default_user:
             return Response({"error": "No superuser found. Please create an admin user first."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ Required columns
-        required_columns = [
-            "registration_number", "salutations", "last_name", "first_name", "middle_name",
-            "appelation", "birth_date", "age", "birth_place", "civil_status", "sex",
-            "contact_number", "nationality", "fisherfolk_status", "mothers_maidenname",
-            "fishing_ground", "fma_number", "religion", "educational_background",
-            "household_month_income", "other_source_income", "farming_income",
-            "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-            "with_voterID", "voterID_number", "is_CCT_4ps", "is_ICC", "main_source_livelihood",
-            "other_source_livelihood", "street", "barangay", "municipality", "province",
-            "region", "residency_years", "barangay_verifier", "position", "verified_date",
-            "contact_fname", "contact_mname", "contact_lname", "contact_relationship", "contact_contactno",
-            "contact_municipality", "contact_barangay", "total_no_household_memb", "no_male",
-            "no_female", "no_children", "no_in_school", "no_out_school", "no_employed",
-            "no_unemployed", "org_name", "member_since", "org_position"
+        core_required = [
+            "registration_number", "last_name", "first_name", "birth_date",
+            "sex", "contact_number", "birth_place", "civil_status", "nationality"
         ]
-
-        # ✅ Check missing columns
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
+        
+        missing_core = [col for col in core_required if col not in df.columns]
+        if missing_core:
             return Response(
-                {"error": "Missing columns", "missing_columns": missing_columns},
+                {"error": f"Missing required columns: {', '.join(missing_core)}", "missing_columns": missing_core},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        imported, errors = 0, []
+        imported, skipped, errors, warnings = 0, 0, [], []
+        
+        def safe_get(row, col, default=None):
+            if col not in df.columns:
+                return default
+            val = row.get(col)
+            if pd.isna(val) or (isinstance(val, str) and val.strip() == ""):
+                return default
+            return val
+        
+        def clean_bool(val):
+            if pd.isna(val): return False
+            if isinstance(val, bool): return val
+            if isinstance(val, (int, float)): return bool(val)
+            if isinstance(val, str): return val.strip().lower() in ('true', 'yes', '1', 'y')
+            return False
 
         for idx, row in df.iterrows():
-            fisherfolk_data = {col: row[col] for col in required_columns}
+            row_num = idx + 2
+            try:
+                fisherfolk_data = {}
+                for field in core_required:
+                    fisherfolk_data[field] = safe_get(row, field)
+                fisherfolk_data["salutations"] = safe_get(row, "salutations", "")
+                fisherfolk_data["middle_name"] = safe_get(row, "middle_name", "")
+                fisherfolk_data["appelation"] = safe_get(row, "appelation", "")
+                fisherfolk_data["age"] = safe_get(row, "age", None)
+                fisherfolk_data["fisherfolk_status"] = safe_get(row, "fisherfolk_status", "")
+                fisherfolk_data["mothers_maidenname"] = safe_get(row, "mothers_maidenname", "")
+                fisherfolk_data["fishing_ground"] = safe_get(row, "fishing_ground", "")
+                fisherfolk_data["fma_number"] = safe_get(row, "fma_number", "")
+                fisherfolk_data["religion"] = safe_get(row, "religion", "")
+                fisherfolk_data["educational_background"] = safe_get(row, "educational_background", "")
+                fisherfolk_data["household_month_income"] = safe_get(row, "household_month_income", "")
+                fisherfolk_data["other_source_income"] = safe_get(row, "other_source_income", "")
+                fisherfolk_data["farming_income"] = clean_bool(safe_get(row, "farming_income", False))
+                fisherfolk_data["farming_income_salary"] = safe_get(row, "farming_income_salary", None)
+                fisherfolk_data["fisheries_income"] = clean_bool(safe_get(row, "fisheries_income", False))
+                fisherfolk_data["fisheries_income_salary"] = safe_get(row, "fisheries_income_salary", None)
+                fisherfolk_data["with_voterID"] = clean_bool(safe_get(row, "with_voterID", False))
+                fisherfolk_data["voterID_number"] = safe_get(row, "voterID_number", "")
+                fisherfolk_data["is_CCT_4ps"] = clean_bool(safe_get(row, "is_CCT_4ps", False))
+                fisherfolk_data["is_ICC"] = clean_bool(safe_get(row, "is_ICC", False))
+                fisherfolk_data["main_source_livelihood"] = safe_get(row, "main_source_livelihood", "")
+                fisherfolk_data["other_source_livelihood"] = safe_get(row, "other_source_livelihood", "")
 
-            # --- Clean phone numbers ---
-            for phone_field in ["contact_number", "contact_contactno"]:
-                if fisherfolk_data.get(phone_field):
-                    num = str(fisherfolk_data[phone_field]).strip()
-                    if "." in num:
-                        num = num.split(".")[0]
-                    if not num.startswith("09") and not num.startswith("+639"):
-                        if num.startswith("9"):
-                            num = "0" + num
-                    fisherfolk_data[phone_field] = num
-
-            # --- Clean date fields ---
-            for date_field in ["birth_date", "verified_date", "member_since"]:
-                if fisherfolk_data.get(date_field):
-                    val = fisherfolk_data[date_field]
+                if fisherfolk_data.get("contact_number"):
+                    num = str(fisherfolk_data["contact_number"]).strip()
+                    if "." in num: num = num.split(".")[0]
+                    if num and not num.startswith(("09", "+639")):
+                        if num.startswith("9") and len(num) == 10: num = "0" + num
+                    fisherfolk_data["contact_number"] = num
+                
+                birth_date_raw = fisherfolk_data.get("birth_date")
+                if birth_date_raw:
                     try:
-                        if hasattr(val, "strftime"):  # datetime/date object
-                            fisherfolk_data[date_field] = val.strftime("%Y-%m-%d")
+                        if hasattr(birth_date_raw, "strftime"):
+                            fisherfolk_data["birth_date"] = birth_date_raw.strftime("%Y-%m-%d")
                         else:
-                            parsed = pd.to_datetime(val, errors="coerce")
+                            parsed = pd.to_datetime(birth_date_raw, errors="coerce")
                             if pd.notnull(parsed):
-                                fisherfolk_data[date_field] = parsed.strftime("%Y-%m-%d")
-                    except Exception:
-                        pass
+                                fisherfolk_data["birth_date"] = parsed.strftime("%Y-%m-%d")
+                    except: pass
+                
+                if not fisherfolk_data["registration_number"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"registration_number": "Required"}})
+                    continue
+                if not fisherfolk_data["birth_date"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"birth_date": "Required or invalid"}})
+                    continue
 
-            # --- Main fisherfolk ---
-            main_fields = [
-                "registration_number", "salutations", "last_name", "first_name",
-                "middle_name", "appelation", "birth_date", "age", "birth_place",
-                "civil_status", "sex", "contact_number", "nationality",
-                "fisherfolk_status", "mothers_maidenname", "fishing_ground",
-                "fma_number", "religion", "educational_background",
-                "household_month_income", "other_source_income", "farming_income",
-                "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-                "with_voterID", "voterID_number",  "is_CCT_4ps", "is_ICC", "main_source_livelihood",
-                "other_source_livelihood"
-            ]
-            fisherfolk_core = {field: fisherfolk_data[field] for field in main_fields}
+                main_fields = [
+                    "registration_number", "salutations", "last_name", "first_name",
+                    "middle_name", "appelation", "birth_date", "age", "birth_place",
+                    "civil_status", "sex", "contact_number", "nationality",
+                    "fisherfolk_status", "mothers_maidenname", "fishing_ground",
+                    "fma_number", "religion", "educational_background",
+                    "household_month_income", "other_source_income", "farming_income",
+                    "farming_income_salary", "fisheries_income", "fisheries_income_salary",
+                    "with_voterID", "voterID_number", "is_CCT_4ps", "is_ICC",
+                    "main_source_livelihood", "other_source_livelihood"
+                ]
+                fisherfolk_core = {field: fisherfolk_data[field] for field in main_fields}
+                serializer = FisherfolkSerializer(data=fisherfolk_core)
+                if serializer.is_valid():
+                    fisherfolk = serializer.save(created_by=default_user)
+                    imported += 1
+                    address_data = {f: safe_get(row, f, "") for f in ["street", "barangay", "municipality", "province", "region", "residency_years", "barangay_verifier", "position"]}
+                    verified_date_raw = safe_get(row, "verified_date")
+                    if verified_date_raw:
+                        try:
+                            if hasattr(verified_date_raw, "strftime"): address_data["verified_date"] = verified_date_raw.strftime("%Y-%m-%d")
+                            else:
+                                parsed = pd.to_datetime(verified_date_raw, errors="coerce")
+                                if pd.notnull(parsed): address_data["verified_date"] = parsed.strftime("%Y-%m-%d")
+                        except: pass
+                    if any(v for v in address_data.values() if v):
+                        try: Address.objects.create(fisherfolk=fisherfolk, **address_data)
+                        except: pass
+                    household_data = {f: safe_get(row, f, 0) for f in ["total_no_household_memb", "no_male", "no_female", "no_children", "no_in_school", "no_out_school", "no_employed", "no_unemployed"]}
+                    if any(household_data.values()):
+                        try: Household.objects.create(fisherfolk=fisherfolk, **household_data)
+                        except: pass
+                    org_name = safe_get(row, "org_name", "")
+                    if org_name:
+                        try:
+                            member_since_raw = safe_get(row, "member_since")
+                            member_since = None
+                            if member_since_raw:
+                                try:
+                                    if hasattr(member_since_raw, "strftime"): member_since = member_since_raw.strftime("%Y-%m-%d")
+                                    else:
+                                        parsed = pd.to_datetime(member_since_raw, errors="coerce")
+                                        if pd.notnull(parsed): member_since = parsed.strftime("%Y-%m-%d")
+                                except: pass
+                            Organization.objects.create(fisherfolk=fisherfolk, org_name=org_name, member_since=member_since, org_position=safe_get(row, "org_position", ""))
+                        except: pass
+                    contact_data = {f: safe_get(row, f, "") for f in ["contact_fname", "contact_lname", "contact_mname", "contact_relationship", "contact_municipality", "contact_barangay"]}
+                    contact_contactno_raw = safe_get(row, "contact_contactno", "")
+                    if contact_contactno_raw:
+                        num = str(contact_contactno_raw).strip()
+                        if "." in num: num = num.split(".")[0]
+                        if num and not num.startswith(("09", "+639")):
+                            if num.startswith("9") and len(num) == 10: num = "0" + num
+                        contact_data["contact_contactno"] = num
+                    if any(v for v in contact_data.values() if v):
+                        try: Contacts.objects.create(fisherfolk=fisherfolk, **contact_data)
+                        except: pass
+                else:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": serializer.errors})
+            except Exception as e:
+                skipped += 1
+                errors.append({"row": row_num, "errors": {"exception": str(e)}})
 
-            serializer = FisherfolkSerializer(data=fisherfolk_core)
-            if serializer.is_valid():
-                fisherfolk = serializer.save(created_by=default_user)  # ✅ only here
+        response_data = {"imported": imported, "skipped": skipped, "total_rows": len(df), "errors": errors, "warnings": warnings}
+        return Response(response_data, status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
+
+class ImportBoatExcelView(APIView):
+    """Enhanced Excel import for Boats"""
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request, *args, **kwargs):
+        file_obj = request.FILES.get("file")
+        if not file_obj:
+            return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            df = pd.read_excel(file_obj, engine=None)
+        except Exception as e:
+            return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+        core_required = ["mfbr_number", "boat_name", "fisherfolk_registration_number",
+                        "application_date", "type_of_registration", "type_of_ownership",
+                        "boat_type", "fishing_ground", "fma_number", "built_place",
+                        "no_fishers", "material_used", "homeport", "built_year"]
+
+        missing_core = [col for col in core_required if col not in df.columns]
+        if missing_core:
+            return Response({"error": f"Missing required columns: {', '.join(missing_core)}",
+                           "missing_columns": missing_core}, status=status.HTTP_400_BAD_REQUEST)
+
+        imported, skipped, errors = 0, 0, []
+
+        def safe_get(row, col, default=None):
+            if col not in df.columns:
+                return default
+            val = row.get(col)
+            return default if pd.isna(val) or (isinstance(val, str) and val.strip() == "") else val
+
+        def clean_date(date_val):
+            if not date_val or pd.isna(date_val):
+                return None
+            try:
+                if hasattr(date_val, "strftime"):
+                    return date_val.strftime("%Y-%m-%d")
+                parsed = pd.to_datetime(date_val, errors="coerce")
+                return parsed.strftime("%Y-%m-%d") if pd.notnull(parsed) else None
+            except:
+                return None
+
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            try:
+                fisherfolk_reg = safe_get(row, "fisherfolk_registration_number")
+                if not fisherfolk_reg:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": "Required"}, "type": "validation"})
+                    continue
+
+                try:
+                    fisherfolk = Fisherfolk.objects.get(registration_number=fisherfolk_reg)
+                except Fisherfolk.DoesNotExist:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": f"Fisherfolk '{fisherfolk_reg}' not found"}, "type": "validation"})
+                    continue
+
+                boat_data = {
+                    "mfbr_number": safe_get(row, "mfbr_number"),
+                    "boat_name": safe_get(row, "boat_name", "Unnamed"),
+                    "fisherfolk_registration_number": fisherfolk,
+                    "application_date": clean_date(safe_get(row, "application_date")),
+                    "type_of_registration": safe_get(row, "type_of_registration"),
+                    "type_of_ownership": safe_get(row, "type_of_ownership"),
+                    "boat_type": safe_get(row, "boat_type"),
+                    "fishing_ground": safe_get(row, "fishing_ground"),
+                    "fma_number": safe_get(row, "fma_number"),
+                    "built_place": safe_get(row, "built_place"),
+                    "no_fishers": safe_get(row, "no_fishers", 0),
+                    "material_used": safe_get(row, "material_used"),
+                    "homeport": safe_get(row, "homeport"),
+                    "built_year": safe_get(row, "built_year"),
+                    "engine_make": safe_get(row, "engine_make", ""),
+                    "serial_number": safe_get(row, "serial_number", ""),
+                    "horsepower": safe_get(row, "horsepower", "")
+                }
+
+                if not boat_data["application_date"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"application_date": "Required or invalid format"}, "type": "validation"})
+                    continue
+
+                Boat.objects.create(**boat_data)
                 imported += 1
 
-                # --- Related models (no user field here) ---
-                address_fields = ["street", "barangay", "municipality", "province", "region",
-                                  "residency_years", "barangay_verifier", "position", "verified_date"]
-                address_data = {f: fisherfolk_data.get(f) for f in address_fields}
-                if any(address_data.values()):
-                    Address.objects.create(fisherfolk=fisherfolk, **address_data)
+            except Exception as e:
+                skipped += 1
+                errors.append({"row": row_num, "errors": {"exception": str(e)}, "type": "exception"})
 
-                household_fields = ["total_no_household_memb", "no_male", "no_female", "no_children",
-                                    "no_in_school", "no_out_school", "no_employed", "no_unemployed"]
-                household_data = {f: fisherfolk_data.get(f) for f in household_fields}
-                if any(household_data.values()):
-                    Household.objects.create(fisherfolk=fisherfolk, **household_data)
-
-                org_fields = ["org_name", "member_since", "org_position"]
-                org_data = {f: fisherfolk_data.get(f) for f in org_fields}
-                if any(org_data.values()):
-                    Organization.objects.create(fisherfolk=fisherfolk, **org_data)
-
-                contact_fields = ["contact_fname", "contact_lname", "contact_mname", "contact_relationship",
-                                  "contact_contactno", "contact_municipality", "contact_barangay"]
-                contact_data = {f: fisherfolk_data.get(f) for f in contact_fields}
-                if any(contact_data.values()):
-                    Contacts.objects.create(fisherfolk=fisherfolk, **contact_data)
-
-            else:
-                errors.append({
-                    "row": idx + 2,
-                    "errors": serializer.errors
-                })
-
-        if errors:
-            return Response({"imported": imported, "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({"imported": imported, "errors": []}, status=status.HTTP_200_OK)
-
-
+        return Response({"imported": imported, "skipped": skipped, "total_rows": len(df), "errors": errors},
+                       status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
+                       
 # Municipality Management ViewSets
 class MunicipalityViewSet(viewsets.ModelViewSet):
     queryset = Municipality.objects.all()
