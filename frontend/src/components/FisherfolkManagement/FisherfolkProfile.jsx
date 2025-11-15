@@ -41,7 +41,7 @@ const Info = ({ label, value }) => (
   </div>
 );
 
-const FisherfolkProfile = () => {
+const FisherfolkProfile = ({ editPathBuilder }) => {
   const { id } = useParams();
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -245,7 +245,7 @@ const FisherfolkProfile = () => {
       doc.setFontSize(10);
       const footerY = pageHeight - 24;
       const dateLine = `Date generated: ${new Date().toLocaleDateString()}`;
-      const copyLine = `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`;
+      const copyLine = `  ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`;
       doc.text(dateLine, pageWidth / 2, footerY - 12, { align: 'center' });
       doc.text(copyLine, pageWidth / 2, footerY, { align: 'center' });
     };
@@ -564,7 +564,11 @@ const FisherfolkProfile = () => {
   };
 
   const handleEditConfirm = () => {
-    navigate(`/admin/fisherfolk/edit/${fisherfolk.registration_number}`);
+    const buildEditPath =
+      typeof editPathBuilder === "function"
+        ? editPathBuilder
+        : (reg) => `/admin/fisherfolk/edit/${reg}`;
+    navigate(buildEditPath(fisherfolk.registration_number));
   };
 
   if (loading) return <Loader />;

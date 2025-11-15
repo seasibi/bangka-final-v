@@ -42,6 +42,7 @@ import MAAddFisherfolk from '../pages/municipal/AddFisherfolk'
 import MAAddBoat from '../pages/municipal/AddBoat'
 import MATrackerView from '../pages/municipal/TrackerView'
 import MAEditBoat from '../pages/municipal/EditBoat'
+import MAHelpCenter from '../pages/municipal/HelpCenter';
 
 import AdminUserManagement from '../pages/admin/UserManagement'
 import AddBoat from '../pages/admin/AddBoat'
@@ -168,6 +169,26 @@ const AppRoutes = () => {
         <Route path="dashboard" element={<PrivateRoute element={<MunicipalDashboard />} />} />
          <Route path="fisherfolkManagement" element={<PrivateRoute element={<MAFisherfolkManagement />} />} />
          <Route path="fisherfolkManagement/add" element={<PrivateRoute element={<MAAddFisherfolk />} />} />
+         <Route
+           path="fisherfolkManagement/profile/:id"
+           element={
+             <PrivateRoute
+               element={
+                 <FisherfolkProfile
+                   editPathBuilder={(fid) => `/municipal_agriculturist/fisherfolkManagement/${fid}/edit`}
+                 />
+               }
+             />
+           }
+         />
+         <Route
+           path="fisherfolkManagement/:id/edit"
+           element={
+             <PrivateRoute
+               element={<EditFisherfolk backPath="/municipal_agriculturist/fisherfolkManagement" />}
+             />
+           }
+         />
          <Route path="boatRegistryManagement" element={<PrivateRoute element={<MABoatRegistryManagement />} />} />
           <Route path="boat-registry/add" element={<PrivateRoute element={<MAAddBoat />} />} />
          <Route path="boat-registry/profile/:id" element={<PrivateRoute element={<BoatProfile editBasePath="/municipal_agriculturist" />} />} />
@@ -178,6 +199,7 @@ const AppRoutes = () => {
          <Route path="notifications" element={<PrivateRoute element={<Notifications />} />} />
          <Route path="reportGeneration" element={<PrivateRoute element={<MAReportGeneration />} />} />
          <Route path="utility" element={<PrivateRoute element={<MAUtility />} />} />
+         <Route path="helpCenter" element={<PrivateRoute element={<MAHelpCenter />} />} />
          <Route path="excelImport" element={<PrivateRoute element={<ExcelImport />} />} />
       </Route>
     </Routes>

@@ -115,6 +115,7 @@ const AddFisherfolkForm = forwardRef(({
       contact_mname: "",
       contact_lname: "",
       contact_relationship: "",
+      contact_relationship_other: "",
       contact_contactno: "",
       contact_municipality: "",
       contact_barangay: "",
@@ -418,6 +419,7 @@ const AddFisherfolkForm = forwardRef(({
     };
   }, [formData.registration_number, formData.municipality, currentStep]);
 
+  // Update form title and subtitle based on current step
   useEffect(() => {
     if (currentStep === 1) {
       setFormTitle?.("Add New Fisherfolk");
@@ -444,215 +446,250 @@ const AddFisherfolkForm = forwardRef(({
   );
 
   const toTitleCase = (str) => {
-    return str.toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase());
+    if (!str) return "";
+    return str
+      .toString()
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
   const handleInputChange = (e) => {
-  const { name, value, type, checked } = e.target;
-  let newValue = type === "checkbox" ? checked : value;
+    const { name, value, type, checked } = e.target;
+    let newValue = type === "checkbox" ? checked : value;
 
-  // Title case for specific fields
-  const titleCaseFields = [
-    "first_name",
-    "last_name",
-    "middle_name",
-    "mothers_maidenname",
-    "birth_place",
-    "barangay_verifier",
-    "contact_fname",
-    "contact_mname",
-    "contact_lname",
-  ];
-  if (titleCaseFields.includes(name)) {
-    newValue = toTitleCase(newValue);
-  }
-
-  // Start with current formData
-  let updatedFormData = { ...formData, [name]: newValue };
-  let updatedErrors = { ...errors };
-
-  // Parse helper
-  const toNum = (v, def = 0) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : def;
-  };
-
-  // Residency years cannot exceed age
-  if (name === "residency_years") {
-    const age = parseInt(formData.age || 0);
-    const residencyYears = parseInt(newValue || 0);
-    if (residencyYears > age) {
-      updatedFormData.residency_years = age;
-      updatedErrors.residency_years = "Years of Residency cannot exceed Age.";
-    } else {
-      updatedErrors.residency_years = null;
+    // Title case for specific fields
+    const titleCaseFields = [
+      "first_name",
+      "last_name",
+      "middle_name",
+      "mothers_maidenname",
+      "birth_place",
+      "barangay_verifier",
+      "contact_fname",
+      "contact_mname",
+      "contact_lname",
+    ];
+    if (titleCaseFields.includes(name)) {
+      newValue = toTitleCase(newValue);
     }
-  }
 
-  // Household children cannot exceed total household members
-  if (name === "no_children") {
-    const total = toNum(formData.total_no_household_memb, 0);
-    const nv = toNum(newValue, 0);
-    if (nv > total) {
-      updatedErrors.no_children = "Number of children cannot exceed total household members.";
-      updatedFormData[name] = total;
-    } else {
-      updatedErrors.no_children = null;
-      updatedFormData[name] = nv;
-    }
-  }
-
-  // Auto-calculate total household members and downstream splits
-  if (name === "no_male" || name === "no_female") {
-    const male = name === "no_male" ? toNum(newValue, 0) : toNum(formData.no_male, 0);
-    const female = name === "no_female" ? toNum(newValue, 0) : toNum(formData.no_female, 0);
-    updatedFormData.no_male = male;
-    updatedFormData.no_female = female;
-    // total = male + female
-    const total = Math.max(0, male + female);
-    updatedFormData.total_no_household_memb = total;
-
-    // children = in_school + out_school, must be < total (if total > 0)
-    let inSch = toNum(updatedFormData.no_in_school, 0);
-    let outSch = toNum(updatedFormData.no_out_school, 0);
-    const maxChildren = total > 0 ? Math.max(total - 1, 0) : 0; // strictly less than total
-    if (inSch + outSch > maxChildren) {
-      // clamp out-of-school to fit
-      outSch = Math.max(0, Math.min(outSch, Math.max(maxChildren - inSch, 0)));
-      updatedErrors.school_split = null;
-    }
-    updatedFormData.no_in_school = inSch;
-    updatedFormData.no_out_school = outSch;
-    updatedFormData.no_children = inSch + outSch;
-
-    // employment must equal total - children
-    const adults = Math.max(total - (inSch + outSch), 0);
-    let employed = Math.min(toNum(updatedFormData.no_employed, 0), adults);
-    updatedFormData.no_employed = employed;
-    updatedFormData.no_unemployed = Math.max(adults - employed, 0);
-    updatedErrors.no_children = null;
-    updatedErrors.employment_split = null;
-  }
-
-  // When in-school or out-of-school changes:
-  // children = in_school + out_of_school, must be < total; employed + unemployed = total - children
-  if (name === "no_in_school" || name === "no_out_school") {
-    const total = toNum(updatedFormData.total_no_household_memb, 0);
-    let inSch = name === "no_in_school" ? toNum(newValue, 0) : toNum(updatedFormData.no_in_school, 0);
-    let outSch = name === "no_out_school" ? toNum(newValue, 0) : toNum(updatedFormData.no_out_school, 0);
-    const maxChildren = total > 0 ? Math.max(total - 1, 0) : 0; // strictly less than total
-    // Clamp to ensure inSch + outSch <= maxChildren
-    if (inSch + outSch > maxChildren) {
-      if (name === "no_in_school") {
-        inSch = Math.min(inSch, maxChildren);
-        outSch = Math.max(0, Math.min(outSch, maxChildren - inSch));
-      } else {
-        outSch = Math.min(outSch, maxChildren);
-        inSch = Math.max(0, Math.min(inSch, maxChildren - outSch));
+    // Integer-only numeric fields: strip non-digits and prevent negatives/decimals
+    const intFields = [
+      "residency_years",
+      "no_male",
+      "no_female",
+      "no_children",
+      "no_in_school",
+      "no_out_school",
+      "no_employed",
+      "no_unemployed",
+    ];
+    if (intFields.includes(name)) {
+      let digits = (newValue || "").toString().replace(/[^0-9]/g, "");
+      // Strip leading zeros but keep a single 0 if the value is all zeros
+      if (digits.length > 1) {
+        digits = digits.replace(/^0+/, "");
+        if (digits === "") digits = "0";
       }
-      updatedErrors.school_split = null;
+      newValue = digits;
     }
-    updatedFormData.no_in_school = inSch;
-    updatedFormData.no_out_school = outSch;
-    updatedFormData.no_children = inSch + outSch;
 
-    // Employment must sum to adults = total - children
-    const adults = Math.max(total - (inSch + outSch), 0);
-    let employed = Math.min(toNum(updatedFormData.no_employed, 0), adults);
-    updatedFormData.no_employed = employed;
-    updatedFormData.no_unemployed = Math.max(adults - employed, 0);
+    // Start with current formData
+    let updatedFormData = { ...formData, [name]: newValue };
+    let updatedErrors = { ...errors };
 
-    updatedErrors.employment_split = null;
-  }
+    const toNum = (v, def = 0) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : def;
+    };
 
-  // When employment fields change, enforce employed + unemployed = out_of_school
-  if (name === "no_employed" || name === "no_unemployed") {
-    const total = toNum(updatedFormData.total_no_household_memb, 0);
-    const children = toNum(updatedFormData.no_children, 0);
-    const adults = Math.max(total - children, 0);
-    if (name === "no_employed") {
-      let employed = Math.max(0, Math.min(adults, toNum(newValue, 0)));
+    // Residency years cannot exceed age
+    if (name === "residency_years") {
+      const age = parseInt(formData.age || 0);
+      const residencyYears = parseInt(newValue || 0);
+      if (residencyYears > age) {
+        updatedFormData.residency_years = age;
+        updatedErrors.residency_years = "Years of Residency cannot exceed Age.";
+      } else {
+        updatedErrors.residency_years = null;
+      }
+    }
+
+    // Household children cannot exceed total household members
+    if (name === "no_children") {
+      const total = toNum(formData.total_no_household_memb, 0);
+      const nv = toNum(newValue, 0);
+      if (nv > total) {
+        updatedErrors.no_children = "Number of children cannot exceed total household members.";
+        updatedFormData[name] = total;
+      } else {
+        updatedErrors.no_children = null;
+        updatedFormData[name] = nv;
+      }
+    }
+
+    // Auto-calculate total household members and downstream splits
+    if (name === "no_male" || name === "no_female") {
+      const male = name === "no_male" ? toNum(newValue, 0) : toNum(formData.no_male, 0);
+      const female = name === "no_female" ? toNum(newValue, 0) : toNum(formData.no_female, 0);
+      updatedFormData.no_male = male;
+      updatedFormData.no_female = female;
+      // total = male + female
+      const total = Math.max(0, male + female);
+      updatedFormData.total_no_household_memb = total;
+
+      // children = in_school + out_school, must be < total (if total > 0)
+      let inSch = toNum(updatedFormData.no_in_school, 0);
+      let outSch = toNum(updatedFormData.no_out_school, 0);
+      const maxChildren = total > 0 ? Math.max(total - 1, 0) : 0; // strictly less than total
+      if (inSch + outSch > maxChildren) {
+        // clamp out-of-school to fit
+        outSch = Math.max(0, Math.min(outSch, Math.max(maxChildren - inSch, 0)));
+        updatedErrors.school_split = null;
+      }
+      updatedFormData.no_in_school = inSch;
+      updatedFormData.no_out_school = outSch;
+      updatedFormData.no_children = inSch + outSch;
+
+      // employment must equal total - children
+      const adults = Math.max(total - (inSch + outSch), 0);
+      let employed = Math.min(toNum(updatedFormData.no_employed, 0), adults);
       updatedFormData.no_employed = employed;
       updatedFormData.no_unemployed = adults - employed;
-    } else {
-      let unemployed = Math.max(0, Math.min(adults, toNum(newValue, 0)));
-      updatedFormData.no_unemployed = unemployed;
-      updatedFormData.no_employed = adults - unemployed;
+      updatedErrors.no_children = null;
+      updatedErrors.employment_split = null;
     }
-    updatedErrors.employment_split = null;
-  }
 
-  // Calculate age from birth_date
-  if (name === "birth_date" && newValue) {
-    const today = new Date();
-    const birthDate = new Date(newValue);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    updatedFormData.age = age >= 0 ? age : "";
-  }
-
-  // Contact number validation (Profile) — enforce digits and difference from contact person
-  if (name === "contact_number") {
-    const norm = (s) => (s || '').replace(/\D/g, '').slice(0, 10);
-    const a = norm(newValue);
-    const b = norm(updatedFormData.contact_contactno);
-    if (!a) {
-      setContactError("Contact number is required.");
-    } else if (a.length !== 10 || !/^9[0-9]{9}$/.test(a)) {
-      setContactError("Contact number must start with 9 and be 10 digits long.");
-    } else if (b && a === b) {
-      // Show error on both sides for immediate feedback
-      setContactError("Must be different from Contact Person Number");
-      setContact_contactnoError("Must be different from fisherfolk Contact Number");
-      updatedErrors.contact_contactno = "Must be different from fisherfolk Contact Number";
-    } else {
-      setContactError("");
-      if (contact_contactnoError === "Must be different from fisherfolk Contact Number") {
-        setContact_contactnoError("");
+    // When in-school or out-of-school changes:
+    // children = in_school + out_of_school, must be < total; employed + unemployed = total - children
+    if (name === "no_in_school" || name === "no_out_school") {
+      const total = toNum(updatedFormData.total_no_household_memb, 0);
+      let inSch = name === "no_in_school" ? toNum(newValue, 0) : toNum(updatedFormData.no_in_school, 0);
+      let outSch = name === "no_out_school" ? toNum(newValue, 0) : toNum(updatedFormData.no_out_school, 0);
+      const maxChildren = total > 0 ? Math.max(total - 1, 0) : 0; // strictly less than total
+      // Clamp to ensure inSch + outSch <= maxChildren
+      if (inSch + outSch > maxChildren) {
+        if (name === "no_in_school") {
+          inSch = Math.min(inSch, maxChildren);
+          outSch = Math.max(0, Math.min(outSch, maxChildren - inSch));
+        } else {
+          outSch = Math.min(outSch, maxChildren);
+          inSch = Math.max(0, Math.min(inSch, maxChildren - outSch));
+        }
+        updatedErrors.school_split = null;
       }
-      if (updatedErrors.contact_contactno === "Must be different from fisherfolk Contact Number") {
-        delete updatedErrors.contact_contactno;
-      }
-    }
-  }
+      updatedFormData.no_in_school = inSch;
+      updatedFormData.no_out_school = outSch;
+      updatedFormData.no_children = inSch + outSch;
 
-  // Contact person number validation — enforce digits and difference from profile number
-  if (name === "contact_contactno") {
-    const norm = (s) => (s || '').replace(/\D/g, '').slice(0, 10);
-    const a = norm(newValue);
-    const b = norm(updatedFormData.contact_number);
-    if (!a) {
-      setContact_contactnoError("Contact number is required.");
-    } else if (a.length !== 10 || !/^9[0-9]{9}$/.test(a)) {
-      setContact_contactnoError("Contact number must start with 9 and be 10 digits long.");
-    } else if (b && a === b) {
-      setContact_contactnoError("Must be different from fisherfolk Contact Number");
-      updatedErrors.contact_contactno = "Must be different from fisherfolk Contact Number";
-    } else {
-      setContact_contactnoError("");
-      if (contactError === "Must be different from Contact Person Number") {
+      // Employment must sum to adults = total - children
+      const adults = Math.max(total - (inSch + outSch), 0);
+      let employed = Math.min(toNum(updatedFormData.no_employed, 0), adults);
+      updatedFormData.no_employed = employed;
+      updatedFormData.no_unemployed = adults - employed;
+
+      updatedErrors.employment_split = null;
+    }
+
+    // When employment fields change, enforce employed + unemployed = out_of_school
+    if (name === "no_employed" || name === "no_unemployed") {
+      const total = toNum(updatedFormData.total_no_household_memb, 0);
+      const children = toNum(updatedFormData.no_children, 0);
+      const adults = Math.max(total - children, 0);
+      if (name === "no_employed") {
+        let employed = Math.max(0, Math.min(adults, toNum(newValue, 0)));
+        updatedFormData.no_employed = employed;
+        updatedFormData.no_unemployed = adults - employed;
+      } else {
+        let unemployed = Math.max(0, Math.min(adults, toNum(newValue, 0)));
+        updatedFormData.no_unemployed = unemployed;
+        updatedFormData.no_employed = adults - unemployed;
+      }
+      updatedErrors.employment_split = null;
+    }
+
+    // Calculate age from birth_date
+    if (name === "birth_date" && newValue) {
+      const today = new Date();
+      const birthDate = new Date(newValue);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const m = today.getMonth() - birthDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      updatedFormData.age = age >= 0 ? age : "";
+    }
+
+    // Contact number validation (Profile) — enforce digits and difference from contact person
+    if (name === "contact_number") {
+      const norm = (s) => (s || '').replace(/\D/g, '').slice(0, 10);
+      const a = norm(newValue);
+      const b = norm(updatedFormData.contact_contactno);
+      if (!a) {
+        setContactError("Contact number is required.");
+      } else if (a.length !== 10 || !/^9[0-9]{9}$/.test(a)) {
+        setContactError("Contact number must start with 9 and be 10 digits long.");
+      } else if (b && a === b) {
+        // Show error on both sides for immediate feedback
+        setContactError("Must be different from Contact Person Number");
+        setContact_contactnoError("Must be different from fisherfolk Contact Number");
+        updatedErrors.contact_contactno = "Must be different from fisherfolk Contact Number";
+      } else {
         setContactError("");
-      }
-      if (updatedErrors.contact_contactno === "Must be different from fisherfolk Contact Number") {
-        delete updatedErrors.contact_contactno;
+        if (contact_contactnoError === "Must be different from fisherfolk Contact Number") {
+          setContact_contactnoError("");
+        }
+        if (updatedErrors.contact_contactno === "Must be different from fisherfolk Contact Number") {
+          delete updatedErrors.contact_contactno;
+        }
       }
     }
-  }
 
-  // Final state updates
-  setFormData(updatedFormData);
-  setErrors(updatedErrors);
-  // Live-validate the field that changed
-  try {
-    validateField(name, updatedFormData[name]);
-  } catch (err) {
-    // validation helper may reference state; swallow errors to avoid breaking typing
-    console.error('validateField error', err);
-  }
-};
+    // Contact person number validation — enforce digits and difference from profile number
+    if (name === "contact_contactno") {
+      const norm = (s) => (s || '').replace(/\D/g, '').slice(0, 10);
+      const a = norm(newValue);
+      const b = norm(updatedFormData.contact_number);
+      if (!a) {
+        setContact_contactnoError("Contact number is required.");
+      } else if (a.length !== 10 || !/^9[0-9]{9}$/.test(a)) {
+        setContact_contactnoError("Contact number must start with 9 and be 10 digits long.");
+      } else if (b && a === b) {
+        setContact_contactnoError("Must be different from fisherfolk Contact Number");
+        updatedErrors.contact_contactno = "Must be different from fisherfolk Contact Number";
+      } else {
+        setContact_contactnoError("");
+        if (contactError === "Must be different from Contact Person Number") {
+          setContactError("");
+        }
+        if (updatedErrors.contact_contactno === "Must be different from fisherfolk Contact Number") {
+          delete updatedErrors.contact_contactno;
+        }
+      }
+    }
+
+    // Verified date validation
+    if (name === "verified_date") {
+      if (!newValue) {
+        updatedErrors.verified_date = "Verified Date is required.";
+      } else if (newValue > today) {
+        updatedErrors.verified_date = "Verified Date cannot be in the future.";
+      } else {
+        delete updatedErrors.verified_date;
+      }
+    }
+
+    // Final state updates
+    setFormData(updatedFormData);
+    setErrors(updatedErrors);
+    // Live-validate the field that changed
+    try {
+      validateField(name, updatedFormData[name]);
+    } catch (err) {
+      // validation helper may reference state; swallow errors to avoid breaking typing
+      console.error('validateField error', err);
+    }
+  };
 
   // Validate a single field dynamically as user types or selects
   const validateField = (name, value) => {
@@ -1048,13 +1085,18 @@ const AddFisherfolkForm = forwardRef(({
           .map((org) => {
             if (!org) return null;
             const name = (org.org_name || "").toString().trim();
+            const positionRaw = (org.org_position || "").toString().trim();
+            const customPosition = (org.custom_org_position || "").toString().trim();
             return {
               org_name:
                 name.toLowerCase() === "others"
                   ? (org.custom_org_name || "").toString().trim()
                   : name,
               member_since: org.member_since || "",
-              org_position: org.org_position || "",
+              org_position:
+                positionRaw.toLowerCase() === "others"
+                  ? customPosition
+                  : positionRaw,
             };
           })
           .filter((o) => o && (o.org_name || o.member_since || o.org_position))
@@ -1087,9 +1129,6 @@ const AddFisherfolkForm = forwardRef(({
       return copy;
     });
 
-  // NOTE: organization data is sent via the `organizations` array in the submission payload.
-  // Removed earlier accidental attempt to call `formData.append(...)` on the component state object.
-
   const validateOrganizationsPage = () => {
     const newErrors = {};
     (formData.organizations || []).forEach((org, i) => {
@@ -1107,12 +1146,22 @@ const AddFisherfolkForm = forwardRef(({
         const yearStr = ((org?.member_since) || "").toString().trim();
         const posStr = ((org?.org_position) || "").toString().trim();
         const y = parseInt(yearStr, 10);
+        // Compute earliest logical membership year: birth year + 18 (if birth_date is available)
+        let minYearForMembership = 1900;
+        if (formData.birth_date) {
+          const birth = new Date(formData.birth_date);
+          if (!isNaN(birth.getTime())) {
+            minYearForMembership = birth.getFullYear() + 18;
+          }
+        }
         if (!yearStr || isNaN(y) || y < 1900 || y > new Date().getFullYear()) {
           newErrors[`org_${i}_member_since`] = !yearStr
             ? "Please enter a valid year."
             : (y > new Date().getFullYear())
               ? "Member since cannot be in the future."
               : "Please enter a valid year.";
+        } else if (y < minYearForMembership) {
+          newErrors[`org_${i}_member_since`] = "Member since year is not consistent with fisherfolk age (must be at least 18 years old).";
         }
         if (!posStr) {
           newErrors[`org_${i}_position`] = "Please enter position.";
@@ -1123,6 +1172,7 @@ const AddFisherfolkForm = forwardRef(({
     console.log("validateOrganizationsPage -> newErrors:", newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
   const renderStep1 = () => (
     <div
       className="space-y-6 relative font-montserrat"
@@ -1445,34 +1495,30 @@ const AddFisherfolkForm = forwardRef(({
             <label className="block text-sm font-medium text-gray-700">
               Sex <span className="text-red-500">*</span>
             </label>
-            <div className="relative mt-1">
-              <div className="flex gap-4 mt-3 ml-7">
-                <label className="flex items-center mr-15">
-                  <input
-                    type="radio"
-                    name="sex"
-                    value="Male"
-                    checked={formData.sex === "Male"}
-                    onChange={handleInputChange}
-                    required
-                    className="mr-2"
-                  />
-                  Male
-                </label>
+            <div className="flex gap-4 mt-3 ml-7">
+              <label className="flex items-center mr-15">
+                <input
+                  type="radio"
+                  name="sex"
+                  value="Male"
+                  checked={formData.sex === "Male"}
+                  onChange={handleInputChange}
+                  className="mr-2"
+                />
+                Male
+              </label>
 
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="sex"
-                    value="Female"
-                    checked={formData.sex === "Female"}
-                    onChange={handleInputChange}
-                    required
-                    className="mr-2"
-                  />
-                  Female
-                </label>
-              </div>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="sex"
+                  value="Female"
+                  checked={formData.sex === "Female"}
+                  onChange={handleInputChange}
+                  className="mr-2"
+                />
+                Female
+              </label>
             </div>
           </div>
           <div>
@@ -1592,7 +1638,8 @@ const AddFisherfolkForm = forwardRef(({
                 onChange={handleInputChange}
                 placeholder="Select Municipality first"
                 readOnly
-                className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900"
+                required
               />
             </div>
           </div>
@@ -1786,6 +1833,8 @@ const AddFisherfolkForm = forwardRef(({
                 placeholder="Year of Residency"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
+                min={0}
+                step={1}
               />
               {errors.residency_years && (
                 <span className="mt-1 text-xs text-red-600">
@@ -1860,7 +1909,7 @@ const AddFisherfolkForm = forwardRef(({
                 </Listbox.Options>
               </div>
             </Listbox>
-        <ErrorText name="position" />
+            <ErrorText name="position" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">
@@ -1917,6 +1966,7 @@ const AddFisherfolkForm = forwardRef(({
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
                 min={0}
+                step={1}
               />
             </div>
           </div>
@@ -1934,6 +1984,7 @@ const AddFisherfolkForm = forwardRef(({
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 required
                 min={0}
+                step={1}
               />
             </div>
           </div>
@@ -1968,6 +2019,8 @@ const AddFisherfolkForm = forwardRef(({
                 onChange={handleInputChange}
                 placeholder="No. in School"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                min={0}
+                step={1}
               />
             </div>
           </div>
@@ -1983,6 +2036,8 @@ const AddFisherfolkForm = forwardRef(({
                 onChange={handleInputChange}
                 placeholder="No. out of School"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                min={0}
+                step={1}
               />
             </div>
           </div>
@@ -1998,6 +2053,8 @@ const AddFisherfolkForm = forwardRef(({
                 onChange={handleInputChange}
                 placeholder="No. Employed"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                min={0}
+                step={1}
               />
             </div>
             <p className="text-xs text-gray-500 mt-1">Total - Children = Employed + Unemployed</p>
@@ -2014,6 +2071,8 @@ const AddFisherfolkForm = forwardRef(({
                 onChange={handleInputChange}
                 placeholder="No. Unemployed"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                min={0}
+                step={1}
               />
             </div>
           </div>
@@ -2135,7 +2194,7 @@ const AddFisherfolkForm = forwardRef(({
                   name="farming_income_salary"
                   value={formData.farming_income_salary}
                   onChange={(e) => {
-                    let rawValue = e.target.value.replace(/,/g, "");
+                    let rawValue = e.target.value.replace(/,/g, ""); // strip commas
                     if (rawValue === "" || isNaN(rawValue)) {
                       handleInputChange({
                         target: { name: e.target.name, value: "" },
@@ -2143,6 +2202,7 @@ const AddFisherfolkForm = forwardRef(({
                       return;
                     }
 
+                    // Format only with commas while typing (no decimals forced yet)
                     const [intPart, decimalPart] = rawValue.split(".");
                     let formatted = new Intl.NumberFormat("en-US", {
                       maximumFractionDigits: 0,
@@ -2328,19 +2388,41 @@ const AddFisherfolkForm = forwardRef(({
             <label className="block text-sm font-medium text-gray-700">
               Relationship <span className="text-red-500">*</span>
             </label>
-            <div className="relative mt-1">
-              <input
-                type="text"
+            <div className="relative mt-1 space-y-2">
+              <select
                 name="contact_relationship"
                 value={formData.contact_relationship}
                 onChange={handleInputChange}
-                placeholder="Relationship"
                 className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
                 required
-              />
+              >
+                <option value="" hidden>
+                  Select Relationship
+                </option>
+                <option value="Wife">Wife</option>
+                <option value="Husband">Husband</option>
+                <option value="Sister">Sister</option>
+                <option value="Brother">Brother</option>
+                <option value="Mother">Mother</option>
+                <option value="Others">Others</option>
+              </select>
+              {formData.contact_relationship === "Others" && (
+                <div className="mt-1 ml-6 border-l-2 border-blue-300 pl-4">
+                  <input
+                    type="text"
+                    name="contact_relationship_other"
+                    value={formData.contact_relationship_other}
+                    onChange={handleInputChange}
+                    placeholder="Specify relationship"
+                    className="w-full px-4 py-2 border border-blue-300 rounded-lg mt-1"
+                    required
+                  />
+                </div>
+              )}
             </div>
             <ErrorText name="contact_relationship" />
           </div>
+
           <div>
             <div className="flex items-center justify-between">
               <label className="block text-sm font-medium text-gray-700 mb-0">
@@ -2699,6 +2781,7 @@ const AddFisherfolkForm = forwardRef(({
 
         {(formData.organizations || []).map((org, index) => {
           const nameError = errors?.[`org_${index}_name`];
+          const hasOrgName = !!(org.org_name && org.org_name.toString().trim());
 
           return (
             <div key={index} className="mb-6">
@@ -2883,14 +2966,18 @@ const AddFisherfolkForm = forwardRef(({
                   </label>
                   <div className="relative mt-1">
                     <input
-                      type="number"
+                      type="text"
                       value={org.member_since || ""}
-                      min="1900"
-                      max={new Date().getFullYear()}
+                      inputMode="numeric"
+                      maxLength={4}
                       placeholder="YYYY"
+                      disabled={!hasOrgName}
                       onChange={(e) => {
+                        const raw = e.target.value || "";
+                        // allow only digits and cap at 4 characters
+                        const year = raw.replace(/[^0-9]/g, "").slice(0, 4);
+
                         const updated = [...(formData.organizations || [])];
-                        const year = e.target.value;
                         updated[index] = {
                           ...(updated[index] || {}),
                           member_since: year,
@@ -2900,32 +2987,37 @@ const AddFisherfolkForm = forwardRef(({
                           organizations: updated,
                         }));
 
-                        // Conditional validation: only when org name is provided (including Others with custom name)
-                        const name = (updated[index].org_name || "").toString().trim();
-                        const custom = (updated[index].custom_org_name || "").toString().trim();
-                        const hasName = (name && name.toLowerCase() !== "others") || (name.toLowerCase() === "others" && !!custom);
-                        if (!hasName) {
-                          // optional when no org name
-                          clearFieldError(`org_${index}_member_since`);
-                        } else {
-                          const y = parseInt(year, 10);
-                          if (year && !isNaN(y) && y <= new Date().getFullYear() && y >= 1900) {
-                            clearFieldError(`org_${index}_member_since`);
-                          } else if (!isNaN(y) && y > new Date().getFullYear()) {
-                            setFieldError(`org_${index}_member_since`, "Member since cannot be in the future.");
+                        const y = parseInt(year, 10);
+                        const currentYear = new Date().getFullYear();
+                        const minYearForMembership = currentYear - 18; // must be at least 18 years old
+
+                        setErrors((prev) => {
+                          const copy = { ...(prev || {}) };
+                          if (!year || isNaN(y) || y < 1900 || y > currentYear) {
+                            copy[`org_${index}_member_since`] = !year
+                              ? "Please enter a valid year."
+                              : y > currentYear
+                                ? "Member since cannot be in the future."
+                                : "Please enter a valid year.";
+                          } else if (y < minYearForMembership) {
+                            copy[`org_${index}_member_since`] = "Member since year is not consistent with fisherfolk age (must be at least 18 years old).";
                           } else {
-                            setFieldError(`org_${index}_member_since`, "Please enter a valid year.");
+                            delete copy[`org_${index}_member_since`];
                           }
-                        }
+                          return copy;
+                        });
                       }}
-                      className="relative w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
+                      className="w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
                     />
+                    {errors[`org_${index}_member_since`] && (
+                      <p
+                        id={`org_${index}_member_since_error`}
+                        className="mt-1 text-sm text-red-600"
+                      >
+                        {errors[`org_${index}_member_since`]}
+                      </p>
+                    )}
                   </div>
-                  {errors?.[`org_${index}_member_since`] && (
-                    <p className="mt-1 text-sm text-red-600">
-                      {errors[`org_${index}_member_since`]}
-                    </p>
-                  )}
                 </div>
 
                 {/* Position */}
@@ -2934,15 +3026,15 @@ const AddFisherfolkForm = forwardRef(({
                     Position
                   </label>
                   <div className="relative mt-1">
-                    <input
-                      type="text"
-                      placeholder="Enter position"
+                    <select
                       value={org.org_position || ""}
+                      disabled={!hasOrgName}
                       onChange={(e) => {
+                        const value = e.target.value;
                         const updated = [...(formData.organizations || [])];
                         updated[index] = {
                           ...(updated[index] || {}),
-                          org_position: e.target.value,
+                          org_position: value,
                         };
                         setFormData((prev) => ({
                           ...prev,
@@ -2955,14 +3047,60 @@ const AddFisherfolkForm = forwardRef(({
                         const hasName = (name && name.toLowerCase() !== "others") || (name.toLowerCase() === "others" && !!custom);
                         if (!hasName) {
                           clearFieldError(`org_${index}_position`);
-                        } else if (e.target.value.trim()) {
+                        } else if (value && value !== "Others") {
                           clearFieldError(`org_${index}_position`);
                         } else {
                           setFieldError(`org_${index}_position`, "Please enter position.");
                         }
                       }}
                       className="w-full cursor-default rounded-lg bg-white py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-500"
-                    />
+                    >
+                      <option value="" hidden>
+                        Select Position
+                      </option>
+                      <option value="President">President</option>
+                      <option value="Secretary">Secretary</option>
+                      <option value="Member">Member</option>
+                      <option value="Others">Others</option>
+                    </select>
+                    {/* Custom position input when 'Others' is selected */}
+                    {org.org_position === "Others" && (
+                      <div className="mt-2 ml-2 border-l-2 border-blue-300 pl-4">
+                        <input
+                          type="text"
+                          placeholder="Specify position"
+                          value={org.custom_org_position || ""}
+                          disabled={!hasOrgName}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const updated = [...(formData.organizations || [])];
+                            updated[index] = {
+                              ...(updated[index] || {}),
+                              org_position: "Others",
+                              custom_org_position: value,
+                            };
+                            setFormData((prev) => ({
+                              ...prev,
+                              organizations: updated,
+                            }));
+
+                            const name = (updated[index].org_name || "").toString().trim();
+                            const customName = (updated[index].custom_org_name || "").toString().trim();
+                            const hasName = (name && name.toLowerCase() !== "others") || (name.toLowerCase() === "others" && !!customName);
+
+                            if (!hasName) {
+                              clearFieldError(`org_${index}_position`);
+                            } else if (value.trim()) {
+                              clearFieldError(`org_${index}_position`);
+                            } else {
+                              setFieldError(`org_${index}_position`, "Please enter position.");
+                            }
+                          }}
+                          className="w-full cursor-default rounded-lg bg-white py-2 pl-3 pr-10 text-left border border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700"
+                          required
+                        />
+                      </div>
+                    )}
                     {errors?.[`org_${index}_position`] && (
                       <p className="mt-1 text-sm text-red-600">
                         {errors[`org_${index}_position`]}
@@ -2970,46 +3108,47 @@ const AddFisherfolkForm = forwardRef(({
                     )}
                   </div>
                 </div>
+
               </div>
 
               {/* Buttons row (below inputs) */}
               <div className="flex gap-2 mt-3">
-  {/* Remove button, only show if more than one row */}
-  {formData.organizations.length > 1 && (
-    <button
-      type="button"
-      onClick={() => {
-        const updated = formData.organizations.filter((_, i) => i !== index);
-        setFormData((prev) => ({
-          ...prev,
-          organizations: updated,
-        }));
-      }}
-      className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-    >
-      Remove
-    </button>
-  )}
+                {/* Remove button, only show if more than one row */}
+                {formData.organizations.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = formData.organizations.filter((_, i) => i !== index);
+                      setFormData((prev) => ({
+                        ...prev,
+                        organizations: updated,
+                      }));
+                    }}
+                    className="px-3 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                  >
+                    Remove
+                  </button>
+                )}
 
-  {/* Add button only on last row */}
-  {index === formData.organizations.length - 1 && (
-    <button
-      type="button"
-      onClick={() =>
-        setFormData((prev) => ({
-          ...prev,
-          organizations: [
-            ...prev.organizations,
-            { org_name: "", member_since: "", org_position: "" },
-          ],
-        }))
-      }
-      className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-    >
-      Add Organization
-    </button>
-  )}
-</div>
+                {/* Add button only on last row */}
+                {index === formData.organizations.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        organizations: [
+                          ...prev.organizations,
+                          { org_name: "", member_since: "", org_position: "" },
+                        ],
+                      }))
+                    }
+                    className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                  >
+                    Add Organization
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}
