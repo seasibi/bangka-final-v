@@ -2542,6 +2542,7 @@ class MunicipalityBoundaryViewSet(viewsets.ModelViewSet):
     
 class ImportFisherfolkExcelView(APIView):
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request, *args, **kwargs):
         file_obj = request.FILES.get("file")
@@ -2656,7 +2657,8 @@ class ImportFisherfolkExcelView(APIView):
                     "main_source_livelihood", "other_source_livelihood"
                 ]
                 fisherfolk_core = {field: fisherfolk_data[field] for field in main_fields}
-                serializer = FisherfolkSerializer(data=fisherfolk_core)
+                # Pass request context so serializer can access user for created_by
+                serializer = FisherfolkSerializer(data=fisherfolk_core, context={'request': request})
                 if serializer.is_valid():
                     fisherfolk = serializer.save(created_by=default_user)
                     imported += 1

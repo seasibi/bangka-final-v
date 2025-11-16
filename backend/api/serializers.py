@@ -676,10 +676,11 @@ class FisherfolkSerializer(serializers.ModelSerializer):
                     org_data_list[index][field] = value
 
         # Set created_by
-        if request and hasattr(request, "user") and request.user.is_authenticated:
-            validated_data["created_by"] = request.user
-        else:
-            raise serializers.ValidationError("A valid user is required to create a Fisherfolk record.")
+        if "created_by" not in validated_data:
+            if request and hasattr(request, "user") and request.user.is_authenticated:
+                validated_data["created_by"] = request.user
+            else:
+                raise serializers.ValidationError("A valid user is required to create a Fisherfolk record.")
 
         # Remove any accidental read-only payload we might have added earlier
         validated_data.pop("organizations", None)
