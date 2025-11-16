@@ -55,19 +55,15 @@ const LoginPage = () => {
         )}
 
         <div className="">
-          <div className="flex w-full max-w-md text-center py-5">
-            <div className="w-40">
+          <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-8 border border-gray-200">
+            <div className="flex w-full max-w-md text-center py-5">
+            <div className="w-50">
               <img src={logo} alt="BANGKA Logo" className="h-30 w-auto" />
             </div>
             <div className="flex justify-center items-center font-bold text-blue-900 text-lg">
               <h1>Office of the Provincial Agriculturist Fisheries Section</h1>
             </div>
           </div>
-
-          <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-8 border border-gray-200">
-            <h2 className="text-3xl font-bold text-center text-blue-900 mb-6 justify-center flex">
-              <img src={logosystem} alt="BANGKA Logo" className="h-40 w-auto" />
-            </h2>
 
             {error && (
               <div

@@ -8,6 +8,8 @@ import Modal from "../../components/Modal";
 import SuccessModal from "../../components/SuccessModal";
 import Loader from "../../components/Loader";
 import Button from "../Button";
+import { useAuth } from "../../contexts/AuthContext";
+
 import { getBarangayVerifiers } from "../../services/barangayVerifierService";
 import { getSignatories } from "../../services/signatoriesService";
 import { getBarangays } from "../../services/municipalityService";
@@ -43,6 +45,8 @@ const Info = ({ label, value }) => (
 
 const FisherfolkProfile = ({ editPathBuilder }) => {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isProvincial = user?.user_role === "provincial_agriculturist";
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [fisherfolk, setFisherfolk] = useState(null);
@@ -657,14 +661,18 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
             </div>
             <div className="flex space-x-2">
               <Button onClick={handlePrintReport} className="bg-purple-600 hover:bg-purple-700 text-white">Print Report</Button>
-              <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>
-              <Button
-                onClick={() => setIsStatusModalOpen(true)}
-                className={`px-4 py-2 rounded text-white ${fisherfolk.is_active ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}`}
-                variant={fisherfolk.is_active ? "destructive" : "success"}
-              >
-                {fisherfolk.is_active ? "Deactivate" : "Activate"}
-              </Button>
+              {!isProvincial && (
+                <>
+                  <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>
+                  <Button
+                    onClick={() => setIsStatusModalOpen(true)}
+                    className={`px-4 py-2 rounded text-white ${fisherfolk.is_active ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"}`}
+                    variant={fisherfolk.is_active ? "destructive" : "success"}
+                  >
+                    {fisherfolk.is_active ? "Deactivate" : "Activate"}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 

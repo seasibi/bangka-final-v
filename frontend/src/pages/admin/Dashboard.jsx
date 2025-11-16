@@ -68,11 +68,11 @@ const AdminDashboard = () => {
   if (error) return <ErrorFullScreen message={error} />;
 
   return (
-    <div className="bg-gray-50 min-h-screen px-4 md:px-6 py-6 font-sans" style={{ fontFamily: "Montserrat, sans-serif" }}>
-      <div className="max-w-7xl mx-auto">
+    <div className="h-full bg-gray-50" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <div className="h-full px-4 py-7" style={{ fontFamily: "Montserrat, sans-serif" }}>
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
-          <div className="grid grid-cols-1 grid-rows-1">
+          <div className="grid grid-cols-1 grid-rows-1 ml-2">
             <h1 className="text-3xl font-bold text-gray-900 mt-4" style={{ fontFamily: 'Montserrat, sans-serif' }}>
               DASHBOARD
             </h1>

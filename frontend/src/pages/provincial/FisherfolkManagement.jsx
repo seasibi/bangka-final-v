@@ -208,7 +208,7 @@ const PAFisherfolkManagement = () => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value))}
-                className="border rounded px-2 py-1 text-sm"
+                className="border border-b-2 border-blue-500 rounded px-2 py-1 text-sm"
               >
                 {pageOptions.map((opt) => (
                   <option key={opt} value={opt}>
@@ -221,7 +221,7 @@ const PAFisherfolkManagement = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="border rounded px-2 py-1 text-sm"
+                className="border border-b-2 border-blue-500 rounded px-2 py-1 text-sm"
               >
                 <option value="all">All</option>
                 <option value="active">Active</option>
@@ -231,7 +231,7 @@ const PAFisherfolkManagement = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-2 py-1 border rounded disabled:opacity-50"
+                className="px-2 py-1 border border-b-2 border-blue-500 rounded disabled:opacity-50"
                 disabled={currentPage <= 1}
               >
                 Prev
@@ -250,7 +250,7 @@ const PAFisherfolkManagement = () => {
               </div>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="px-2 py-1 border rounded disabled:opacity-50"
+                className="px-2 py-1 border border-b-2 border-blue-500 rounded disabled:opacity-50"
                 disabled={currentPage >= totalPages}
               >
                 Next
@@ -294,7 +294,7 @@ const PAFisherfolkManagement = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
-                            onClick={() => navigate(`/admin/fisherfolk/profile/${person.registration_number}`)}
+                            onClick={() => navigate(`/provincial_agriculturist/fisherfolkManagement/profile/${person.registration_number}`)}
                             className="text-white bg-blue-700 py-1 px-3 hover:bg-blue-500 rounded-md"
                           >
                             View Profile

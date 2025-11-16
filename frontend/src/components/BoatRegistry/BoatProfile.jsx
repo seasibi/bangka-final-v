@@ -5,6 +5,7 @@ import Loader from "../../components/Loader";
 import Button from "../Button";
 import axios from "axios";
 import SuccessModal from "../../components/SuccessModal";
+import { useAuth } from "../../contexts/AuthContext";
 import { motion as Motion, AnimatePresence } from "framer-motion";
 import {
   assignTrackerToBoat,
@@ -43,6 +44,8 @@ const Info = ({ label, value }) => (
 
 const BoatProfile = ({ editBasePath = '/admin' }) => {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isProvincial = user?.user_role === "provincial_agriculturist";
   const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [boat, setBoat] = useState(null);
@@ -529,11 +532,13 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
             </div>
           </div>
           <div className="flex space-x-2">
-            <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>
+            {!isProvincial && (
+              <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>
+            )}
 
             <Button onClick={generatePDF} className="bg-blue-600 hover:bg-blue-700">Print Report</Button>
 
-            {boat.is_active && (
+            {!isProvincial && boat.is_active && (
               <Button
                 onClick={() => setIsDeactivateModalOpen(true)}
                 className="bg-red-600 hover:bg-red-700"
@@ -542,24 +547,26 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
               </Button>
             )}
 
-            {boat.tracker ? (
-              // If tracker already assigned
-              <Button
-                onClick={() => setIsTrackerModalOpen(true)}
-                className="bg-red-600 hover:bg-red-700"
-              >
-                Unassign Tracker
-              </Button>
-            ) : (
-              // If no tracker assigned
-              <Button
-                onClick={() => {
-                  fetchTrackers();
-                  setIsTrackerModalOpen(true);
-                }}
-              >
-                Assign Tracker
-              </Button>
+            {!isProvincial && (
+              boat.tracker ? (
+                // If tracker already assigned
+                <Button
+                  onClick={() => setIsTrackerModalOpen(true)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Unassign Tracker
+                </Button>
+              ) : (
+                // If no tracker assigned
+                <Button
+                  onClick={() => {
+                    fetchTrackers();
+                    setIsTrackerModalOpen(true);
+                  }}
+                >
+                  Assign Tracker
+                </Button>
+              )
             )}
           </div>
         </div>

@@ -50,7 +50,7 @@ const Utility = () => {
         <div className="flex items-center mb-8 mt-2">
           <div className="grid grid-cols-1 grid-rows-2">
             <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-              Utilities Management
+              UTILITIES MANAGEMENT
             </h1>
             <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
               Manage the inside workings of the system

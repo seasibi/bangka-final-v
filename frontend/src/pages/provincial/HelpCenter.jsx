@@ -223,14 +223,26 @@ const HelpCenter = () => {
   });
 
   return (
-    <div className="bg-gray-50 px-6 py-6 font-sans overflow-x-hidden" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-      <div className="mb-4">
-        <PageHeader
-          title="Help Center"
-          subtitle="Guides, FAQs, and support for Provincial Agriculturist"
-          backTo="/provincial_agriculturist/utility"
-        />
-      </div>
+    <div className="h-full bg-gray-50" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <div className="h-full px-4 py-7" style={{ fontFamily: "Montserrat, sans-serif" }}>
+        <div className="flex items-center mb-3">
+          {/* back button */}
+          <button type="button" onClick={() => navigate(-1)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 ml-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-3" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              HELP CENTER
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Use this page to learn how to use the system
+            </p>
+          </div>
+
 
       {/* Search Bar */}
       <div className="mb-8">
@@ -244,6 +256,7 @@ const HelpCenter = () => {
             className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
+      </div>
       </div>
 
       {/* Quick Links — horizontal scroll with arrows */}
@@ -422,6 +435,7 @@ const HelpCenter = () => {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };

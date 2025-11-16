@@ -8,14 +8,8 @@ const MABirukBilugTracking = () => {
   const navigate = useNavigate();
   const [boundaryType, setBoundaryType] = React.useState("water");
   return (
-    <div
-      className="h-full bg-gray-50"
-      style={{ fontFamily: "Montserrat, sans-serif" }}
-    >
-      <div
-        className="h-full px-4 py-7"
-        style={{ fontFamily: "Montserrat, sans-serif" }}
-      >
+    <div className="h-full bg-gray-50" style={{ fontFamily: "Montserrat, sans-serif" }}>
+      <div className="h-full px-4 py-7" style={{ fontFamily: "Montserrat, sans-serif" }}>
         {/* Page Title */}
          <div className="flex justify-between items-center ml-2">
           <div className="grid grid-cols-1 grid-rows-2">

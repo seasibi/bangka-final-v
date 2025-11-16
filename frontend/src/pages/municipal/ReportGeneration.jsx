@@ -401,19 +401,14 @@ const MunicipalReportGeneration = () => {
   return (
     <div className="min-h-screen bg-gray-50" style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <div className="px-6 py-6">
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-            aria-label="Back"
-          >
-            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <PageTitle value="REPORT GENERATION" />
-            <p className="text-sm text-gray-600">Generate reports according to your needs. Start by choosing a report.</p>
+         <div className="flex justify-between items-center ">
+          <div className="grid grid-cols-1 grid-rows-2">
+            <h1 className="text-3xl font-bold text-gray-900 mt-3" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              REPORT GENERATION
+            </h1>
+            <p className="text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Generate reports, start with selecting report type
+            </p>
           </div>
         </div>
 

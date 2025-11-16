@@ -75,7 +75,7 @@ const PABoatRegistryManagement = () => {
 
 
   const handleEditBoat = (boatId) => {
-    navigate(`/admin/boat-registry/edit/${boatId}`);
+    navigate(`/provincial_agriculturist/boat-registry/profile/${boatId}`);
   };
 
   const handleArchiveClick = (boatregId) => {

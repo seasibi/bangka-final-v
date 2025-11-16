@@ -12,6 +12,7 @@ import MunicipalLayout from '../layouts/MunicipalLayout'
 import AdminDashboard from '../pages/admin/Dashboard'
 import ProvincialDashboard from '../pages/provincial/Dashboard'
 import MunicipalDashboard from '../pages/municipal/Dashboard'
+import MyProfile from '../pages/MyProfile'
 import AdminUserProfiles from '../components/UserManagement/UserProfile'
 import AdminFisherfolkManagement from '../pages/admin/FisherfolkManagement'
 import AdminMunicipalAgriManagement from '../pages/admin/MunicipalAgriculturistManagement'
@@ -94,6 +95,7 @@ const AppRoutes = () => {
       {/* Admin Routes */}
       <Route path="/admin/*" element={<AdminLayout />}>
         <Route path="dashboard" element={<PrivateRoute element={<AdminDashboard />} />} />
+        <Route path="profile" element={<PrivateRoute element={<MyProfile />} />} />
         <Route path="fisherfolkManagement" element={<PrivateRoute element={<AdminFisherfolkManagement />} />} />
         <Route path="municipalAgriManagement" element={<PrivateRoute element={<AdminMunicipalAgriManagement />} />} />
         <Route path="provincialAgriManagement" element={<PrivateRoute element={<AdminProvincialAgriManagement />} />} />
@@ -153,8 +155,27 @@ const AppRoutes = () => {
       {/* Provincial Routes */}
   <Route path="/provincial_agriculturist/*" element={<ProvincialLayout />}>
     <Route path="dashboard" element={<PrivateRoute element={<ProvincialDashboard />} />} />
+    <Route path="profile" element={<PrivateRoute element={<MyProfile />} />} />
     <Route path="fisherfolkManagement" element={<PrivateRoute element={<PAFisherfolkManagement />} />} />
+    <Route
+      path="fisherfolkManagement/profile/:id"
+      element={
+        <PrivateRoute
+          element={
+            <FisherfolkProfile />
+          }
+        />
+      }
+    />
     <Route path="boatRegistryManagement" element={<PrivateRoute element={<PAgriBoatRegistryManagement />} />} />
+    <Route
+      path="boat-registry/profile/:id"
+      element={
+        <PrivateRoute
+          element={<BoatProfile editBasePath="/provincial_agriculturist" />}
+        />
+      }
+    />
     <Route path="birukbilugTracking" element={<PrivateRoute element={<PABirukBilugTracking />} />} />
     <Route path="TrackerManagement" element={<PrivateRoute element={<PATrackerManagement />} />} />
     <Route path="notifications" element={<PrivateRoute element={<Notifications />} />} />
@@ -168,6 +189,7 @@ const AppRoutes = () => {
       {/* Agriculturist Routes */}
       <Route path="/municipal_agriculturist/*" element={<MunicipalLayout/>}>
         <Route path="dashboard" element={<PrivateRoute element={<MunicipalDashboard />} />} />
+        <Route path="profile" element={<PrivateRoute element={<MyProfile />} />} />
          <Route path="fisherfolkManagement" element={<PrivateRoute element={<MAFisherfolkManagement />} />} />
          <Route path="fisherfolkManagement/add" element={<PrivateRoute element={<MAAddFisherfolk />} />} />
          <Route
