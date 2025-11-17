@@ -3259,6 +3259,7 @@ class BarangayVerifierViewSet(viewsets.ModelViewSet):
         assigned = BarangayVerifier.objects.filter(
             municipality_id=municipality_id,
             barangay_id=barangay_id,
+            is_active=True,
         ).values_list('position', flat=True)
         
         return Response({'assigned_positions': list(assigned)})

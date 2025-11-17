@@ -1041,7 +1041,6 @@ class Signatory(models.Model):
     
     class Meta:
         ordering = ['municipality__name', 'barangay__name', 'position']
-        unique_together = ['municipality', 'position']
         verbose_name_plural = 'Signatories'
     
     def __str__(self):
