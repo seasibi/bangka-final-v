@@ -43,6 +43,14 @@ const Info = ({ label, value }) => (
   </div>
 );
 
+const formatNameWithMiddleInitial = (first, middle, last) => {
+  const f = (first || '').trim();
+  const l = (last || '').trim();
+  const m = (middle || '').trim();
+  const middleInitial = m ? m.charAt(0).toUpperCase() + '.' : '';
+  return [f, middleInitial, l].filter(Boolean).join(' ');
+};
+
 const FisherfolkProfile = ({ editPathBuilder }) => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -106,14 +114,14 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
             org_position: data.org_position || "",
           };
         }
-        
+
         // Debug: Log organization data
         console.log("[FisherfolkProfile] Organization data:", {
           org_name: org?.org_name,
           custom_org_name: org?.custom_org_name,
           full_org: org
         });
-        
+
         setOrganization(org);
 
         // contacts: some endpoints return an object under `contacts` or `contact`
@@ -147,7 +155,7 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
         const selectedMuni = municipalities.find(
           m => normalizeMunicipality(m.name) === normalizeMunicipality(address.municipality)
         );
-        
+
         if (selectedMuni) {
           // Fetch all barangays to get the barangay_id (skip silently if forbidden)
           let barangay = null;
@@ -223,7 +231,7 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
     const drawHeader = () => {
       try {
         doc.addImage(logo, 'PNG', margin, 20, logoWidth, logoHeight);
-      } catch {}
+      } catch { }
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
       doc.text(
@@ -343,7 +351,7 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
         doc.setDrawColor(0, 0, 0);
         doc.line(xCenter - lineWidth / 2, y, xCenter + lineWidth / 2, y);
         // name below the line
-        const name = (s.name || 'Not assigned').toUpperCase();
+        const name = formatNameWithMiddleInitial(s.first_name, s.middle_name, s.last_name).toUpperCase();
         doc.setFont('helvetica', 'bold');
         doc.text(name, xCenter, y + 14, { align: 'center' });
         // position below the name
@@ -377,7 +385,7 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
     // Profile Information
     addSectionHeader('Profile Information');
     addKVGrid([
-      ['Salutations', fisherfolk?.salutations],
+      ['Suffix', fisherfolk?.salutations],
       ['First Name', fisherfolk?.first_name],
       ['Middle Name', fisherfolk?.middle_name],
       ['Last Name', fisherfolk?.last_name],
@@ -401,85 +409,95 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
     if (address) {
       addSectionHeader('Address');
       addKVGrid([
-        ['Street', address.street],
-        ['Barangay', address.barangay],
-        ['City/Municipality', address.municipality],
-        ['Province', address.province],
         ['Region', address.region],
+        ['Province', address.province],
+        ['City/Municipality', address.municipality],
+        ['Barangay', address.barangay],
+        ['Street', address.street],
         ['Years of Residency', address.residency_years],
       ], 3, true);
       addDivider();
+
+      // Barangay Verifier
       addSectionHeader('Barangay Verifier');
       addKVGrid([
-        ['Verifier', address.barangay_verifier],
-        ['Position', address.position],
+        ['Position', address.position || 'Barangay Verifier'],
+        ['Barangay Verifier', address.barangay_verifier],
         ['Verified Date', address.verified_date],
       ], 3, true);
       addDivider();
     }
 
-    // Household
+    // Number of Household Member
     if (household) {
-      addSectionHeader('Number of Household Members');
+      addSectionHeader('Number of Household Member');
       addKVGrid([
-        ['Total', household.total_no_household_memb],
-        ['Male', household.no_male],
-        ['Female', household.no_female],
-        ['Children', household.no_children],
-        ['In School', household.no_in_school],
-        ['Out of School', household.no_out_school],
-        ['Employed', household.no_employed],
-        ['Unemployed', household.no_unemployed],
-      ], 3, true);
+        ['Total no. of Household', household.total_no_household_memb],
+        ['No. of Male', household.no_male],
+        ['No. of Female', household.no_female],
+        ['No. of Children', household.no_children],
+        ['No. of In School', household.no_in_school],
+        ['No. of Out Of School', household.no_out_school],
+        ['No. of Employed', household.no_employed],
+        ['No. of Unemployed', household.no_unemployed],
+      ], 4, true);
       addDivider();
     }
 
-    // Educational Background
-    addSectionHeader('Educational Background');
+    // Education Background
+    addSectionHeader('Education Background');
     addKVGrid([
-      ['Educational Background', fisherfolk?.educational_background],
+      ['Education Background', fisherfolk?.educational_background],
     ], 3, true);
     addDivider();
 
-    // Monthly Income
-    addSectionHeader('Monthly Income Information');
+    // Household Monthly Income / Other Source of income
+    const oslList = Array.isArray(fisherfolk?.other_source_livelihood) ? fisherfolk.other_source_livelihood : [];
+    const oslText = oslList.length > 0
+      ? oslList.map(v => (v === 'Others' && (fisherfolk?.other_source_income || '').trim()
+        ? `Others (${fisherfolk.other_source_income.trim()})`
+        : v)).join(', ')
+      : 'None';
+
+    addSectionHeader('Household Monthly Income / Other Source of income');
     addKVGrid([
-      ['Monthly Income', fisherfolk?.household_month_income],
-    ], 3, true);
+      ['Household Monthly Income', fisherfolk?.household_month_income],
+      ['Farming', fisherfolk?.farming_income_salary || 'None'],
+      ['Fisheries', fisherfolk?.fisheries_income_salary || 'None'],
+      ['Other Source of income', oslText],
+    ], 4, true);
     addDivider();
 
-    // Contact
+    // Contact Person
     const ec = contact || fisherfolk?.contacts || {};
-    addSectionHeader('Contact Information');
+    addSectionHeader('Contact Person');
     const contactRows = [
-      ['Full Name', `${safe(ec.contact_fname || '')} ${safe(ec.contact_mname || '')} ${safe(ec.contact_lname || '')}`.trim()],
+      ['First Name', safe(ec.contact_fname || '')],
+      ['Middle Name', safe(ec.contact_mname || '')],
+      ['Last Name', safe(ec.contact_lname || '')],
       ['Relationship', ec.contact_relationship],
       ['Contact Number', ec.contact_contactno],
     ];
     if (ec.contact_barangay || ec.contact_municipality) {
-      contactRows.push(['Address', `${safe(ec.contact_barangay || '')}, ${safe(ec.contact_municipality || '')}, La Union`]);
+      contactRows.push(['City/Municipality', safe(ec.contact_municipality || '')]);
+      contactRows.push(['Barangay', safe(ec.contact_barangay || '')]);
+      contactRows.push(['Street', '']);
     }
     addKVGrid(contactRows, 3, true);
     addDivider();
 
-    // Demographics & Eligibility
-    addSectionHeader('Demographics & Eligibility');
+    // Demographic and Eligibility Details
+    addSectionHeader('Demographic and Eligibility Details');
     const demoRows = [
       ['With Voter ID?', fisherfolk?.with_voterID ? 'Yes' : 'No'],
-      ['With CCT/4Ps?', fisherfolk?.is_CCT_4ps ? 'Yes' : 'No'],
-      ['ICC Member?', fisherfolk?.is_ICC ? 'Yes' : 'No'],
+      ['CCT / 4Ps Beneficiary', fisherfolk?.is_CCT_4ps ? 'Yes' : 'No'],
+      ['Indigenous Peoples / Indigenous Cultural Community', fisherfolk?.is_ICC ? 'Yes' : 'No'],
     ];
     if (fisherfolk?.with_voterID) demoRows.push(['Voter ID Number', fisherfolk?.voterID_number]);
     addKVGrid(demoRows, 3, true);
     addDivider();
 
     // Livelihood
-    const oslList = Array.isArray(fisherfolk?.other_source_livelihood) ? fisherfolk.other_source_livelihood : [];
-    const oslText = oslList.length > 0
-      ? oslList.map(v => (v === 'Others' && (fisherfolk?.other_source_income || '').trim()
-          ? `Others (${fisherfolk.other_source_income.trim()})`
-          : v)).join(', ')
-      : 'None';
     addSectionHeader('Livelihood');
     addKVGrid([
       ['Main Source of Livelihood', fisherfolk?.other_main_source_livelihood || fisherfolk?.main_source_livelihood],
@@ -492,33 +510,33 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
     if (Array.isArray(fisherfolk?.organizations) && fisherfolk.organizations.length > 0) org = fisherfolk.organizations[0];
     if (!org && fisherfolk?.organization) org = fisherfolk.organization;
     if (org && (org.org_name || org.member_since || org.org_position)) {
-      addSectionHeader('Organization Information');
+      addSectionHeader('Organization');
       addKVGrid([
-        ['Name', org.org_name],
+        ['Organization Name', org.org_name],
+        ['Position/Official Designation', org.org_position],
         ['Member Since', org.member_since],
-        ['Position', org.org_position],
       ], 3, true);
       addDivider();
     }
 
     // Certification
-    const fullName = `${safe(fisherfolk?.salutations ? fisherfolk.salutations + ' ' : '')}${safe(fisherfolk?.first_name)} ${safe(fisherfolk?.middle_name || '')} ${safe(fisherfolk?.last_name)}`.trim();
+    const fullName = formatNameWithMiddleInitial(fisherfolk?.first_name, fisherfolk?.middle_name, fisherfolk?.last_name);
     addSectionHeader('Certification');
     addKVGrid([
-      ['Name of Applicant', fullName],
-      ['Date of Registration', fisherfolk?.date_added ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString()],
-    ], 2);
+      ['Name of Applicant', `${safe(fisherfolk?.salutations ? fisherfolk.salutations + ' ' : '')}${fullName}`.trim()],
+      ['Date of Application', fisherfolk?.date_added ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString()],
+    ], 3, true);
     addDivider();
 
     // Signatories
     addSectionHeader('Signatories');
-    const verifierName = barangayVerifier ? `${barangayVerifier.first_name} ${barangayVerifier.middle_name ? barangayVerifier.middle_name + ' ' : ''}${barangayVerifier.last_name}` : 'Not assigned';
-    const muniAgri = signatories.municipal ? `${signatories.municipal.first_name} ${signatories.municipal.middle_name ? signatories.municipal.middle_name + ' ' : ''}${signatories.municipal.last_name}` : 'Not assigned';
-    const mayor = signatories.mayor ? `${signatories.mayor.first_name} ${signatories.mayor.middle_name ? signatories.mayor.middle_name + ' ' : ''}${signatories.mayor.last_name}` : 'Not assigned';
+    const verifierName = barangayVerifier ? formatNameWithMiddleInitial(barangayVerifier.first_name, barangayVerifier.middle_name, barangayVerifier.last_name) : 'Not assigned';
+    const muniAgri = signatories.municipal ? formatNameWithMiddleInitial(signatories.municipal.first_name, signatories.municipal.middle_name, signatories.municipal.last_name) : 'Not assigned';
+    const mayor = signatories.mayor ? formatNameWithMiddleInitial(signatories.mayor.first_name, signatories.mayor.middle_name, signatories.mayor.last_name) : 'Not assigned';
     addSignatoriesGrid([
-      { name: verifierName, position: 'Barangay Captain' },
-      { name: muniAgri, position: 'Municipal Agriculturist' },
-      { name: mayor, position: 'Mayor' },
+      { first_name: verifierName, middle_name: '', last_name: '', position: 'Barangay Captain' },
+      { first_name: muniAgri, middle_name: '', last_name: '', position: 'Municipal Agriculturist' },
+      { first_name: mayor, middle_name: '', last_name: '', position: 'Mayor' },
     ]);
 
     // Footer on last page
@@ -554,7 +572,7 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
           delete map[key];
         }
         localStorage.setItem(storeKey, JSON.stringify(map));
-      } catch {}
+      } catch { }
 
       setFisherfolk({ ...fisherfolk, is_active: !fisherfolk.is_active });
       setIsStatusModalOpen(false);
@@ -645,15 +663,14 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
               />
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {fisherfolk.first_name} {fisherfolk.middle_name} {fisherfolk.last_name}
+                  {formatNameWithMiddleInitial(fisherfolk.first_name, fisherfolk.middle_name, fisherfolk.last_name)}
                 </h2>
                 <p className="text-sm text-gray-500">
                   Reg. No: {fisherfolk.registration_number}
                 </p>
                 <span
-                  className={`inline-block mt-2 px-3 py-1 text-sm font-medium rounded-full ${
-                    fisherfolk.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                  }`}
+                  className={`inline-block mt-2 px-3 py-1 text-sm font-medium rounded-full ${fisherfolk.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    }`}
                 >
                   {fisherfolk.is_active ? "Active" : "Inactive"}
                 </span>
@@ -812,25 +829,25 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
           {/* Livelihood */}
           <Section title="Livelihood">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Info 
-                label="Main Source of Livelihood" 
+              <Info
+                label="Main Source of Livelihood"
                 value={
                   fisherfolk.other_main_source_livelihood
                     ? fisherfolk.other_main_source_livelihood
                     : fisherfolk.main_source_livelihood
-                } 
+                }
               />
               <Info
                 label="Other Source of Livelihood"
                 value={
                   Array.isArray(fisherfolk.other_source_livelihood) && fisherfolk.other_source_livelihood.length > 0
                     ? fisherfolk.other_source_livelihood
-                        .map((v) =>
-                          v === "Others" && (fisherfolk.other_source_income || "").trim()
-                            ? `Others (${fisherfolk.other_source_income.trim()})`
-                            : v
-                        )
-                        .join(", ")
+                      .map((v) =>
+                        v === "Others" && (fisherfolk.other_source_income || "").trim()
+                          ? `Others (${fisherfolk.other_source_income.trim()})`
+                          : v
+                      )
+                      .join(", ")
                     : "None"
                 }
               />
@@ -842,13 +859,13 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
             <Section title="Organization">
               {fisherfolk.organizations.map((org, idx) => (
                 <div key={idx} className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-3 border-b border-gray-200 pb-2">
-                  <Info 
-                    label="Organization Name" 
+                  <Info
+                    label="Organization Name"
                     value={
                       org?.org_name === "Others" && org?.custom_org_name
                         ? org.custom_org_name
                         : org?.org_name || "Not provided"
-                    } 
+                    }
                   />
                   <Info label="Member Since" value={org?.member_since} />
                   <Info label="Position" value={org?.org_position} />
@@ -859,13 +876,13 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
             organization && (
               <Section title="Organization">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Info 
-                    label="Organization Name" 
+                  <Info
+                    label="Organization Name"
                     value={
                       organization.org_name === "Others" && organization.custom_org_name
                         ? organization.custom_org_name
                         : organization.org_name || "Not provided"
-                    } 
+                    }
                   />
                   <Info label="Member Since" value={organization.member_since} />
                   <Info label="Position" value={organization.org_position} />
@@ -876,15 +893,57 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
 
           {/* Certification */}
           <Section title="Certification">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Info
-                label="Name of Applicant"
-                value={`${fisherfolk.salutations ? fisherfolk.salutations + ' ' : ''}${fisherfolk.first_name} ${fisherfolk.middle_name ? fisherfolk.middle_name + ' ' : ''}${fisherfolk.last_name}`.trim()}
-              />
-              <Info
-                label="Date of Registration"
-                value={fisherfolk.date_added ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not provided'}
-              />
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-700 mb-4">
+                I have personally reviewed the information on this application and I certify under penalty of perjury that to the best of my knowledge
+                and belief the information on this application is true and correct, and that I understand this information is subject to public.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Name of Applicant
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      type="text"
+                      value={formatNameWithMiddleInitial(
+                        fisherfolk.first_name,
+                        fisherfolk.middle_name,
+                        fisherfolk.last_name
+                      )}
+                      readOnly
+                      className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Automatic name from fisherfolk data</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Date of Application
+                  </label>
+                  <div className="relative mt-1">
+                    <input
+                      type="text"
+                      value={
+                        fisherfolk.date_added
+                          ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })
+                          : new Date().toLocaleDateString('en-US', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })
+                      }
+                      readOnly
+                      className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Automatic date</p>
+                </div>
+              </div>
             </div>
           </Section>
 
@@ -894,24 +953,24 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
                   <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                    {barangayVerifier 
-                      ? `${barangayVerifier.first_name} ${barangayVerifier.middle_name ? barangayVerifier.middle_name + ' ' : ''}${barangayVerifier.last_name}`.toUpperCase()
+                    {barangayVerifier
+                      ? formatNameWithMiddleInitial(barangayVerifier.first_name, barangayVerifier.middle_name, barangayVerifier.last_name).toUpperCase()
                       : 'NOT ASSIGNED'}
                   </div>
                   <div className="text-xs text-gray-600">Barangay Captain</div>
                 </div>
                 <div className="text-center">
                   <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                    {signatories.municipal 
-                      ? `${signatories.municipal.first_name} ${signatories.municipal.middle_name ? signatories.municipal.middle_name + ' ' : ''}${signatories.municipal.last_name}`.toUpperCase()
+                    {signatories.municipal
+                      ? formatNameWithMiddleInitial(signatories.municipal.first_name, signatories.municipal.middle_name, signatories.municipal.last_name).toUpperCase()
                       : 'NOT ASSIGNED'}
                   </div>
                   <div className="text-xs text-gray-600">Municipal Agriculturist</div>
                 </div>
                 <div className="text-center">
                   <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                    {signatories.mayor 
-                      ? `${signatories.mayor.first_name} ${signatories.mayor.middle_name ? signatories.mayor.middle_name + ' ' : ''}${signatories.mayor.last_name}`.toUpperCase()
+                    {signatories.mayor
+                      ? formatNameWithMiddleInitial(signatories.mayor.first_name, signatories.mayor.middle_name, signatories.mayor.last_name).toUpperCase()
                       : 'NOT ASSIGNED'}
                   </div>
                   <div className="text-xs text-gray-600">Mayor</div>
@@ -945,9 +1004,8 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
                   {fisherfolk?.is_active ? "Deactivate Fisherfolk" : "Activate Fisherfolk"}
                 </h2>
                 <p className="mb-4">
-                  {`Are you sure you want to ${
-                    fisherfolk?.is_active ? "deactivate" : "activate"
-                  } ${fisherfolk?.first_name} ${fisherfolk?.last_name}?`}
+                  {`Are you sure you want to ${fisherfolk?.is_active ? "deactivate" : "activate"
+                    } ${fisherfolk?.first_name} ${fisherfolk?.last_name}?`}
                 </p>
                 <div className="flex justify-end gap-3">
                   <button onClick={() => setIsStatusModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>

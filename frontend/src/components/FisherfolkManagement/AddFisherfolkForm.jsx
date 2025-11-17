@@ -146,6 +146,14 @@ const AddFisherfolkForm = forwardRef(({
   const [verifiersByPosition, setVerifiersByPosition] = useState({});
   const [signatories, setSignatories] = useState({ municipal: null, mayor: null });
 
+  const formatNameWithMiddleInitial = (first, middle, last) => {
+    const f = (first || '').trim();
+    const l = (last || '').trim();
+    const m = (middle || '').trim();
+    const middleInitial = m ? m.charAt(0).toUpperCase() + '.' : '';
+    return [f, middleInitial, l].filter(Boolean).join(' ');
+  };
+
   // Save formData to localStorage whenever it changes
   useEffect(() => {
     // Don't save file objects to localStorage
@@ -1202,6 +1210,7 @@ const AddFisherfolkForm = forwardRef(({
                     <Listbox.Option
                       key="empty"
                       value=""
+                      hidden selected
                       className={({ active }) =>
                         `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-blue-100 text-blue-900" : "text-gray-500"}`
                       }
@@ -1284,7 +1293,7 @@ const AddFisherfolkForm = forwardRef(({
         <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
           Profile Information
         </h2>
-        <div className="grid grid-cols-3 grid-rows-1 gap-4 mb-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
           <div>
             <label className="block text-sm font-medium text-gray-700">
               Salutations <span className="text-red-500">*</span>
@@ -3216,10 +3225,14 @@ const AddFisherfolkForm = forwardRef(({
         </h2>
         <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 place-items-center">
-            <div className="text-center flex flex-col items-center">
+              <div className="text-center flex flex-col items-center">
               <p className="text-sm font-semibold text-gray-900 uppercase underline">
                 {barangayVerifier 
-                  ? `${barangayVerifier.first_name} ${barangayVerifier.middle_name ? barangayVerifier.middle_name + ' ' : ''}${barangayVerifier.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      barangayVerifier.first_name,
+                      barangayVerifier.middle_name,
+                      barangayVerifier.last_name
+                    )
                   : 'Not assigned'}
               </p>
               <p className="text-xs text-gray-600 mt-1">Barangay Captain</p>
@@ -3227,7 +3240,11 @@ const AddFisherfolkForm = forwardRef(({
             <div className="text-center flex flex-col items-center">
               <p className="text-sm font-semibold text-gray-900 uppercase underline">
                 {signatories.municipal 
-                  ? `${signatories.municipal.first_name} ${signatories.municipal.middle_name ? signatories.municipal.middle_name + ' ' : ''}${signatories.municipal.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      signatories.municipal.first_name,
+                      signatories.municipal.middle_name,
+                      signatories.municipal.last_name
+                    )
                   : 'Not assigned'}
               </p>
               <p className="text-xs text-gray-600 mt-1">Municipal Agriculturist</p>
@@ -3235,7 +3252,11 @@ const AddFisherfolkForm = forwardRef(({
             <div className="text-center flex flex-col items-center">
               <p className="text-sm font-semibold text-gray-900 uppercase underline">
                 {signatories.mayor 
-                  ? `${signatories.mayor.first_name} ${signatories.mayor.middle_name ? signatories.mayor.middle_name + ' ' : ''}${signatories.mayor.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      signatories.mayor.first_name,
+                      signatories.mayor.middle_name,
+                      signatories.mayor.last_name
+                    )
                   : 'Not assigned'}
               </p>
               <p className="text-xs text-gray-600 mt-1">Mayor</p>
@@ -3529,7 +3550,11 @@ const AddFisherfolkForm = forwardRef(({
       <span className="block text-sm text-gray-500">Reviewed by</span>
       <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
         {barangayVerifier 
-          ? `${barangayVerifier.first_name} ${barangayVerifier.middle_name ? barangayVerifier.middle_name + ' ' : ''}${barangayVerifier.last_name}`
+          ? formatNameWithMiddleInitial(
+              barangayVerifier.first_name,
+              barangayVerifier.middle_name,
+              barangayVerifier.last_name
+            )
           : 'Not assigned'}
       </p>
       <p className="text-xs text-gray-600 mt-1">Barangay Captain</p>
@@ -3538,7 +3563,11 @@ const AddFisherfolkForm = forwardRef(({
       <span className="block text-sm text-gray-500">Certified correct by</span>
       <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
         {signatories.municipal 
-          ? `${signatories.municipal.first_name} ${signatories.municipal.middle_name ? signatories.municipal.middle_name + ' ' : ''}${signatories.municipal.last_name}`
+          ? formatNameWithMiddleInitial(
+              signatories.municipal.first_name,
+              signatories.municipal.middle_name,
+              signatories.municipal.last_name
+            )
           : 'Not assigned'}
       </p>
       <p className="text-xs text-gray-600 mt-1">Municipal Agriculturist</p>
@@ -3547,7 +3576,11 @@ const AddFisherfolkForm = forwardRef(({
       <span className="block text-sm text-gray-500">Approved by</span>
               <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
                 {signatories.mayor 
-                  ? `${signatories.mayor.first_name} ${signatories.mayor.middle_name ? signatories.mayor.middle_name + ' ' : ''}${signatories.mayor.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      signatories.mayor.first_name,
+                      signatories.mayor.middle_name,
+                      signatories.mayor.last_name
+                    )
                   : 'Not assigned'}
               </p>
               <p className="text-xs text-gray-600 mt-1">Mayor</p>

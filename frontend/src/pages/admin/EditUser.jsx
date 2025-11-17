@@ -9,6 +9,7 @@ import { logActivity } from "../../utils/activityLog";
 import { useAuth } from "../../contexts/AuthContext";
 import { Listbox } from "@headlessui/react";
 import { ChevronUpDownIcon } from "@heroicons/react/20/solid";
+import Loader from "../../components/Loader";
 
 // Add your municipality list here. Replace with your actual list if needed.
 const municipalities = [
@@ -198,7 +199,7 @@ const EditUser = () => {
     </div>
   );
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div><Loader/></div>;
 
   return (
     <div

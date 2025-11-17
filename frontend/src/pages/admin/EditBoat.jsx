@@ -16,13 +16,36 @@ import {
   deleteBoatGearSubtypeAssignment
 } from "../../services/boatService";
 import { getGearTypes, getGearSubtypes } from "../../services/gearService";
+import { getMunicipalities } from "../../services/municipalityService";
+import { getSignatories } from "../../services/signatoriesService";
 import Modal from "../../components/Modal";
 import SuccessModal from "../../components/SuccessModal";
 import ConfirmModal from "../../components/ConfirmModal";
 import Button from "../../components/Button";
 import GearSection from "../../components/BoatRegistry/BoatRegistrationForm/GearSection";
+import Loader from "../../components/Loader";
 
 const API_BASE = import.meta?.env?.VITE_API_BASE || "http://localhost:8000";
+
+const formatNameWithMiddleInitial = (first, middle, last) => {
+  const f = (first || "").trim();
+  const l = (last || "").trim();
+  const m = (middle || "").trim();
+  const middleInitial = m ? m.charAt(0).toUpperCase() + "." : "";
+  return [f, middleInitial, l].filter(Boolean).join(" ");
+};
+
+const normalizeMunicipality = (name) => {
+  const raw = (name || "").toString().trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "city of san fernando" || raw === "san fernando city") {
+    return "san fernando";
+  }
+  if (raw === "sto. tomas") {
+    return "santo tomas";
+  }
+  return raw;
+};
 
 const EditBoat = () => {
   const navigate = useNavigate();
@@ -35,6 +58,15 @@ const EditBoat = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [preview, setPreview] = useState(null);
+
+  // Signatories for Certification section
+  const [signatories, setSignatories] = useState({
+    fisheryCoordinator: null,
+    notedBy: null,
+  });
+  const [loadingSignatories, setLoadingSignatories] = useState(false);
+  const [municipalitiesList, setMunicipalitiesList] = useState([]);
+  const [municipalityName, setMunicipalityName] = useState("");
 
   // Fix: Define currentDate before using it in formData
   const today = new Date();
@@ -61,6 +93,8 @@ const EditBoat = () => {
         const boatData = response.data;
         const fisherfolk = boatData.fisherfolk; // ✅ safe reference
         const fisherAddress = fisherfolk?.address || {};
+        const muniName =
+          fisherAddress.municipality || fisherfolk?.municipality || "";
 
         const fullAddress = [
           fisherAddress.street,
@@ -71,10 +105,10 @@ const EditBoat = () => {
           .filter(Boolean)
           .join(", ");
 
-          // ✅ handle gear_assignments if present
-   const mappedGear = mapGearAssignmentsToFormData(
-      boatData.gear_assignments || []
-    );
+        // ✅ handle gear_assignments if present
+        const mappedGear = mapGearAssignmentsToFormData(
+          boatData.gear_assignments || []
+        );
 
         console.log("Fetched boat:", boatData);
 
@@ -90,6 +124,7 @@ const EditBoat = () => {
           owner_address: fullAddress,
           ...mappedGear, // ✅ merge gear data if any
         }));
+        setMunicipalityName(muniName);
       } catch (error) {
         console.error("Error fetching boat:", error);
         setError("Failed to load boat data.");
@@ -99,6 +134,84 @@ const EditBoat = () => {
     fetchBoat();
     setLoading(false);
   }, [id]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadMunicipalities = async () => {
+      try {
+        const list = await getMunicipalities();
+        if (mounted) {
+          setMunicipalitiesList(Array.isArray(list) ? list : []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch municipalities", err);
+        if (mounted) {
+          setMunicipalitiesList([]);
+        }
+      }
+    };
+
+    loadMunicipalities();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const fetchSignatoriesForMunicipality = async () => {
+      if (!municipalityName) {
+        setSignatories({ fisheryCoordinator: null, notedBy: null });
+        return;
+      }
+
+      try {
+        setLoadingSignatories(true);
+
+        const muni = (municipalitiesList || []).find(
+          (m) =>
+            normalizeMunicipality(m.name) ===
+            normalizeMunicipality(municipalityName)
+        );
+
+        const municipality_id = muni?.municipality_id;
+        const allSignatories = municipality_id
+          ? await getSignatories({ municipality_id })
+          : await getSignatories();
+
+        const fisheryCoordinator = allSignatories.find(
+          (sig) =>
+            sig.position === "Municipal Fishery Coordinator" &&
+            (sig.municipality?.id === municipality_id ||
+              sig.municipality_id === municipality_id)
+        );
+
+        const municipalAgriculturist = allSignatories.find(
+          (sig) =>
+            sig.position === "Municipal Agriculturist" &&
+            (sig.municipality?.id === municipality_id ||
+              sig.municipality_id === municipality_id)
+        );
+
+        let notedBy = municipalAgriculturist;
+        if (!notedBy) {
+          const provincialSigs = await getSignatories();
+          notedBy = provincialSigs.find(
+            (sig) => sig.position === "Provincial Agriculturist"
+          );
+        }
+
+        setSignatories({ fisheryCoordinator, notedBy });
+      } catch (err) {
+        console.error("Error fetching signatories:", err);
+        setSignatories({ fisheryCoordinator: null, notedBy: null });
+      } finally {
+        setLoadingSignatories(false);
+      }
+    };
+
+    fetchSignatoriesForMunicipality();
+  }, [municipalityName, municipalitiesList]);
 
   const handlePictureChange = (e) => {
     const file = e.target.files[0];
@@ -718,7 +831,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
         <div className="h-full px-4 py-6">
           <PageTitle value="Edit Boat" />
           <div className="flex justify-center items-center h-[calc(100%-4rem)]">
-            <div className="text-gray-600">Loading...</div>
+            <Loader/>
           </div>
         </div>
       </div>
@@ -726,31 +839,28 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
   }
 
   return (
-    <div className="container mx-auto px-4 pt-8 pb-15">
-      <div className="flex items-center gap-4 mb-6">
-        <Button
-          type="button"
-          onClick={() => navigate("/admin/boatRegistryManagement")}
-          variant="icon"
-        >
-          {/* Back icon */}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={2}
-            stroke="currentColor"
-            className="w-6 h-6"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-            />
-          </svg>
-        </Button>
-        <PageTitle value="Edit Boat" />
-      </div>
+    <div className="min-h-screen bg-gray-50 p-2">
+      <div className="h-full bg-gray-50 px-4 py-6 pb-16">
+        
+        {/* form title */}
+        <div className="flex items-center">
+          
+          {/* back button */}
+          <button type="button" onClick={() => navigate(-1)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 ml-4">
+            <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>Edit Boat</h1>
+            <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Please fill out the form below to edit a boat.
+            </p>
+          </div>
+
+        </div>
 
       {error && (
         <div className="mb-4 p-4 text-red-700 bg-red-100 rounded-lg">
@@ -960,7 +1070,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="">Select Type</option>
+                  <option selected hidden value="">Select Type</option>
                   <option value="Non-Motorized">Non-Motorized</option>
                   <option value="Motorized">Motorized</option>
                 </select>
@@ -978,7 +1088,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="">Select Material</option>
+                  <option selected hidden value="">Select Material</option>
                   <option value="Wood">Wood</option>
                   <option value="Fiber Glass">Fiber Glass</option>
                   <option value="Composite">Composite</option>
@@ -1031,7 +1141,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 >
-                  <option value="">Select Ownership</option>
+                  <option selected hidden value="">Select Ownership</option>
                   <option value="Individual">Individual</option>
                   <option value="Group">Group</option>
                 </select>
@@ -1049,7 +1159,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
                   onChange={handleInputChange}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option hidden value="">
+                  <option selected hidden value="">
                     Select Engine Make
                   </option>
                   <option value="Briggs & Stratton">Briggs & Stratton</option>
@@ -1102,7 +1212,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option hidden value="">
+                    <option selected hidden value="">
                       Select Horsepower
                     </option>
                     <option value="16">16</option>
@@ -1707,6 +1817,83 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
             />
 
             </div>
+
+          {/* Certification */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+            Certification
+          </h2>
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <p className="text-sm text-gray-700 mb-4">
+              I certify that the information provided in this application is true and correct.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-500">Name of Applicant</label>
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    value={`${formData.owner_name || 'Automatic from fisherfolk name'}`}
+                    readOnly
+                    className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500">Date of Application</label>
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    value={`${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`}
+                    readOnly
+                    className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Signatories */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+            Signatories
+          </h2>
+            {loadingSignatories ? (
+            <div className="text-center py-4">
+              <Loader />
+            </div>
+          ) : (
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 place-items-center">
+                <div className="text-center flex flex-col items-center">
+                  <label className="block text-sm text-gray-500">Enumerator</label>
+                  <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
+                    {signatories.fisheryCoordinator
+                      ? formatNameWithMiddleInitial(
+                          signatories.fisheryCoordinator.first_name,
+                          signatories.fisheryCoordinator.middle_name,
+                          signatories.fisheryCoordinator.last_name
+                        ).toUpperCase()
+                      : 'NOT ASSIGNED'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">Municipal Fishery Coordinator</p>
+                </div>
+                <div className="text-center flex flex-col items-center">
+                  <label className="block text-sm text-gray-500">Noted by</label>
+                  <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
+                    {signatories.notedBy
+                      ? formatNameWithMiddleInitial(
+                          signatories.notedBy.first_name,
+                          signatories.notedBy.middle_name,
+                          signatories.notedBy.last_name
+                        ).toUpperCase()
+                      : 'NOT ASSIGNED'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">{signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+
         </div>
         <div className="mt-6 flex justify-end gap-4">
           <Button type="button" variant="secondary" onClick={handleCancelClick}>
@@ -1751,6 +1938,7 @@ const mapGearAssignmentsToFormData = (gearAssignments) => {
         title="Confirm Update"
         message="Are you sure you want to save these changes to the boat information?"
       />
+    </div>
     </div>
   );
 };

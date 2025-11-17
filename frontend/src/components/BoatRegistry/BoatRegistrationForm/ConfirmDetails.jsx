@@ -3,6 +3,14 @@ import PropTypes from 'prop-types';
 import { GEAR_MAP } from '../../../constants/gearMap';
 import { getSignatories } from '../../../services/signatoriesService';
 
+const formatNameWithMiddleInitial = (first, middle, last) => {
+  const f = (first || '').trim();
+  const l = (last || '').trim();
+  const m = (middle || '').trim();
+  const middleInitial = m ? m.charAt(0).toUpperCase() + '.' : '';
+  return [f, middleInitial, l].filter(Boolean).join(' ');
+};
+
 // Remove common prefixes from display names for cleaner section titles
 const stripDomain = (name = '') => name.replace(/^(Marine|Inland)\s+/i, '').trim();
 
@@ -258,7 +266,11 @@ const ConfirmDetails = ({ formData }) => {
               </p>
               <p className="text-base font-medium text-green-700">
                 {signatories.fisheryCoordinator
-                  ? `${signatories.fisheryCoordinator.first_name} ${signatories.fisheryCoordinator.middle_name ? signatories.fisheryCoordinator.middle_name + ' ' : ''}${signatories.fisheryCoordinator.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      signatories.fisheryCoordinator.first_name,
+                      signatories.fisheryCoordinator.middle_name,
+                      signatories.fisheryCoordinator.last_name
+                    )
                   : 'Not assigned'}
               </p>
             </div>
@@ -271,7 +283,11 @@ const ConfirmDetails = ({ formData }) => {
               </p>
               <p className="text-base font-medium text-green-700">
                 {signatories.notedBy
-                  ? `${signatories.notedBy.first_name} ${signatories.notedBy.middle_name ? signatories.notedBy.middle_name + ' ' : ''}${signatories.notedBy.last_name}`
+                  ? formatNameWithMiddleInitial(
+                      signatories.notedBy.first_name,
+                      signatories.notedBy.middle_name,
+                      signatories.notedBy.last_name
+                    )
                   : 'Not assigned'}
               </p>
             </div>

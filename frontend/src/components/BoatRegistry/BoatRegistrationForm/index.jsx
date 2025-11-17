@@ -43,10 +43,19 @@ import AlertModal from "../../AlertModal";
 import ConfirmModal from "../../ConfirmModal";
 import { useLocation } from "react-router-dom";
 
+const formatNameWithMiddleInitial = (first, middle, last) => {
+  const f = (first || "").trim();
+  const l = (last || "").trim();
+  const m = (middle || "").trim();
+  const middleInitial = m ? m.charAt(0).toUpperCase() + "." : "";
+  return [f, middleInitial, l].filter(Boolean).join(" ");
+};
+
 const steps = [
   "Fisherfolk Search", // step 0
   "Registration Details", // step 1
 ];
+
 const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   const location = useLocation();
   const fisherfolkFromState = location.state?.fisherfolk;
@@ -5664,19 +5673,34 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
             Certification
           </h2>
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <p className="text-sm text-gray-700 mb-4">
+            I certify that the information provided in this application is true and correct.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <span className="block text-sm text-gray-500">Name of Applicant</span>
-              <p className="mt-1 text-base font-medium text-gray-900">
-                {formData.owner_name || 'Not specified'}
-              </p>
+              <label className="block text-sm text-gray-500">Name of Applicant</label>
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={`${formData.owner_name || 'Automatic from fisherfolk name'}`}
+                  readOnly
+                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                />
+              </div>
             </div>
             <div>
-              <span className="block text-sm text-gray-500">Date of Application</span>
-              <p className="mt-1 text-base font-medium text-gray-900">
-                {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-              </p>
+              <label className="block text-sm text-gray-500">Date of Application</label>
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={`${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`}
+                  readOnly
+                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                />
+              </div>
             </div>
+          </div>
           </div>
 
           {/* Signatories */}
@@ -5685,27 +5709,34 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           </h2>
           {loadingSignatories ? (
             <div className="text-center py-4">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
-              <p className="mt-2 text-sm text-gray-600">Loading signatories...</p>
+              <Loader />
             </div>
           ) : (
             <div className="bg-blue-50 p-4 rounded-lg">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 place-items-center">
                 <div className="text-center flex flex-col items-center">
-                  <span className="block text-sm text-gray-500">Enumerator</span>
+                  <label className="block text-sm text-gray-500">Enumerator</label>
                   <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
                     {signatories.fisheryCoordinator
-                      ? `${signatories.fisheryCoordinator.first_name} ${signatories.fisheryCoordinator.middle_name ? signatories.fisheryCoordinator.middle_name + ' ' : ''}${signatories.fisheryCoordinator.last_name}`
-                      : 'Not assigned'}
+                      ? formatNameWithMiddleInitial(
+                          signatories.fisheryCoordinator.first_name,
+                          signatories.fisheryCoordinator.middle_name,
+                          signatories.fisheryCoordinator.last_name
+                        ).toUpperCase()
+                      : 'NOT ASSIGNED'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">Municipal Fishery Coordinator</p>
                 </div>
                 <div className="text-center flex flex-col items-center">
-                  <span className="block text-sm text-gray-500">Noted by</span>
+                  <label className="block text-sm text-gray-500">Noted by</label>
                   <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
                     {signatories.notedBy
-                      ? `${signatories.notedBy.first_name} ${signatories.notedBy.middle_name ? signatories.notedBy.middle_name + ' ' : ''}${signatories.notedBy.last_name}`
-                      : 'Not assigned'}
+                      ? formatNameWithMiddleInitial(
+                          signatories.notedBy.first_name,
+                          signatories.notedBy.middle_name,
+                          signatories.notedBy.last_name
+                        ).toUpperCase()
+                      : 'NOT ASSIGNED'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">{signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}</p>
                 </div>
@@ -5973,8 +6004,9 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
             </div>
 
             {/* Certification Section */}
-            <div className="mt-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-2 border-blue-200">
-              <h4 className="text-xl font-semibold text-blue-900 mb-4">Certification</h4>
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+            Certification
+          </h2>
               <p className="text-gray-700 mb-4 italic">
                 "I hereby certify that all information contained herein is true and correct."
               </p>
@@ -5992,7 +6024,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                   </p>
                 </div>
               </div>
-            </div>
+
 
             {/* Signatories Section */}
             <div className="mt-6 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">

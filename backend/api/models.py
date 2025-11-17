@@ -921,7 +921,6 @@ class BarangayVerifier(models.Model):
     
     class Meta:
         ordering = ['municipality__name', 'barangay__name', 'position']
-        unique_together = ['barangay', 'position']
         verbose_name_plural = 'Barangay Verifiers'
     
     def __str__(self):

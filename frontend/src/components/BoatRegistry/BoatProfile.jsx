@@ -42,6 +42,14 @@ const Info = ({ label, value }) => (
   </div>
 );
 
+const formatNameWithMiddleInitial = (first, middle, last) => {
+  const f = (first || '').trim();
+  const l = (last || '').trim();
+  const m = (middle || '').trim();
+  const middleInitial = m ? m.charAt(0).toUpperCase() + '.' : '';
+  return [f, middleInitial, l].filter(Boolean).join(' ');
+};
+
 const BoatProfile = ({ editBasePath = '/admin' }) => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -168,7 +176,7 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
       const lightBg = [241, 245, 249]; // slate-100
 
       const drawHeader = () => {
-        try { doc.addImage(logo, 'PNG', margin, 20, logoWidth, logoHeight); } catch {}
+        try { doc.addImage(logo, 'PNG', margin, 20, logoWidth, logoHeight); } catch { }
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
         doc.text(
@@ -411,10 +419,18 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
       // Signatories (Enumerator, Noted by)
       addSectionHeader('Signatories');
       const enumName = signatories.fisheryCoordinator
-        ? `${signatories.fisheryCoordinator.first_name || ''} ${signatories.fisheryCoordinator.middle_name ? signatories.fisheryCoordinator.middle_name + ' ' : ''}${signatories.fisheryCoordinator.last_name || ''}`
+        ? formatNameWithMiddleInitial(
+          signatories.fisheryCoordinator.first_name,
+          signatories.fisheryCoordinator.middle_name,
+          signatories.fisheryCoordinator.last_name
+        )
         : 'Not assigned';
       const notedByName = signatories.notedBy
-        ? `${signatories.notedBy.first_name || ''} ${signatories.notedBy.middle_name ? signatories.notedBy.middle_name + ' ' : ''}${signatories.notedBy.last_name || ''}`
+        ? formatNameWithMiddleInitial(
+          signatories.notedBy.first_name,
+          signatories.notedBy.middle_name,
+          signatories.notedBy.last_name
+        )
         : 'Not assigned';
       const notedPos = signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist';
       addSignatoriesGrid([
@@ -704,7 +720,7 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
                           ? type.gear_type?.name.split(" ").slice(1).join(" ")
                           : "Unknown Type"}
                       </div>
-                      
+
                       {/* Subtypes */}
                       {type.subtypes_data?.length > 0 && (
                         <ul className="mt-2 ml-4 space-y-2">
@@ -716,14 +732,14 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
                               <span className="text-gray-700">
                                 {sub.gear_subtype?.name
                                   ? sub.gear_subtype.name
-                                      .split(" ")
-                                      .slice(1)
-                                      .join(" ")
+                                    .split(" ")
+                                    .slice(1)
+                                    .join(" ")
                                   : "Unknown Subtype"}{" "}
                               </span>
                               {sub.is_present ? (
                                 <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
-                                  Qty: {sub.quantity ?? "—"} 
+                                  Qty: {sub.quantity ?? "—"}
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 text-xs font-medium">
@@ -777,54 +793,71 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
             <p className="text-gray-500">No gear assignments found.</p>
           )}
         </Section>
-                  {/* Certification */}
-          <Section title="Certification">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Info
-                label="Name of Applicant"
-                value={
-                  boat?.fisherfolk
-                    ? `${boat.fisherfolk.salutations ? boat.fisherfolk.salutations + ' ' : ''}${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.middle_name ? boat.fisherfolk.middle_name + ' ' : ''}${boat.fisherfolk.last_name || ''}`.trim()
-                    : displayValue(boat?.owner_name)
-                }
-              />
-              <Info
-                label="Date of Registration"
-                value={formatDate(boat?.application_date)}
-              />
+        
+        {/* Certification */}
+          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+            Certification
+          </h2>
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+          <p className="text-gray-700 mb-4 italic">
+            I hereby certify that all information contained herein is true and correct.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Name of Applicant</label>
+              <p className="text-base font-semibold text-gray-900">
+                {boat?.fisherfolk
+                  ? `${boat.fisherfolk.salutations ? boat.fisherfolk.salutations + ' ' : ''}${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.middle_name ? boat.fisherfolk.middle_name.charAt(0).toUpperCase() + '. ' : ''}${boat.fisherfolk.last_name || ''}`.trim() || 'Not specified'
+                  : (boat?.owner_name || 'Not specified')}
+              </p>
             </div>
-          </Section>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Date of Application</label>
+              <p className="text-base font-semibold text-gray-900">
+                {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+          </div>
+          </div>
 
-          {/* Signatories */}
-          <Section title="Signatories">
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="text-center">
-                  <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                    {signatories.fisheryCoordinator
-                      ? `${signatories.fisheryCoordinator.first_name || ''} ${signatories.fisheryCoordinator.middle_name ? signatories.fisheryCoordinator.middle_name + ' ' : ''}${signatories.fisheryCoordinator.last_name || ''}`.toUpperCase()
-                      : 'NOT ASSIGNED'}
-                  </div>
-                  <div className="text-xs text-gray-600">Municipal Fishery Coordinator</div>
-                </div>
-                <div className="text-center">
-                  <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                    {signatories.notedBy
-                      ? `${signatories.notedBy.first_name || ''} ${signatories.notedBy.middle_name ? signatories.notedBy.middle_name + ' ' : ''}${signatories.notedBy.last_name || ''}`.toUpperCase()
-                      : 'NOT ASSIGNED'}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}
-                  </div>
-                </div>
+      {/* Signatories */}
+      <Section title="Signatories">
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="text-center">
+              <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
+                {signatories.fisheryCoordinator
+                  ? formatNameWithMiddleInitial(
+                    signatories.fisheryCoordinator.first_name,
+                    signatories.fisheryCoordinator.middle_name,
+                    signatories.fisheryCoordinator.last_name
+                  ).toUpperCase()
+                  : 'NOT ASSIGNED'}
+              </div>
+              <div className="text-xs text-gray-600">Municipal Fishery Coordinator</div>
+            </div>
+            <div className="text-center">
+              <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
+                {signatories.notedBy
+                  ? formatNameWithMiddleInitial(
+                    signatories.notedBy.first_name,
+                    signatories.notedBy.middle_name,
+                    signatories.notedBy.last_name
+                  ).toUpperCase()
+                  : 'NOT ASSIGNED'}
+              </div>
+              <div className="text-xs text-gray-600">
+                {signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}
               </div>
             </div>
-          </Section>
-      </div>
+          </div>
+        </div>
+      </Section>
+    </div>
 
-      {/* Modals */}
+  {/* Modals */ }
 
-{/* Deactivate Modal */}
+{/* Deactivate Modal */ }
 <AnimatePresence>
   {isDeactivateModalOpen && (
     <>
@@ -879,7 +912,7 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
   )}
 </AnimatePresence>
 
-{/* Edit Modal */}
+{/* Edit Modal */ }
 <AnimatePresence>
   {isEditModalOpen && (
     <>
@@ -923,7 +956,7 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
   )}
 </AnimatePresence>
 
-{/* Tracker Modal */}
+{/* Tracker Modal */ }
 <AnimatePresence>
   {isTrackerModalOpen && (
     <>
@@ -1095,7 +1128,7 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
         message={successMessage}
         onClose={() => setIsSuccessModalOpen(false)}
       />
-    </div>
+    </div >
   );
 };
 

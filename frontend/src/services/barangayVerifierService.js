@@ -61,7 +61,7 @@ export const createBarangayVerifier = async (data) => {
 
 export const updateBarangayVerifier = async (id, data) => {
   try {
-    const response = await api.put(`/barangay-verifiers/${id}/`, data);
+    const response = await api.patch(`/barangay-verifiers/${id}/`, data);
     return response.data;
   } catch (error) {
     console.error('Error updating barangay verifier:', error);

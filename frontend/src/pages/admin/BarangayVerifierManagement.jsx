@@ -13,6 +13,16 @@ import {
 import { getMunicipalities, getBarangays } from '../../services/municipalityService';
 
 const BarangayVerifierManagement = () => {
+  const toTitleCase = (value) => {
+    if (!value) return '';
+    return value
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [municipalities, setMunicipalities] = useState([]);
@@ -70,7 +80,7 @@ const BarangayVerifierManagement = () => {
     if (!municipalityId || !position) return new Set();
     const blocked = new Set(
       (verifiers || [])
-        .filter(v => v.municipality_id === parseInt(municipalityId) && v.position === position)
+        .filter(v => v.is_active && v.municipality_id === parseInt(municipalityId) && v.position === position)
         .map(v => v.barangay_id)
     );
     return blocked;
@@ -106,16 +116,22 @@ const BarangayVerifierManagement = () => {
 
   const fetchAssignedPositions = async (municipalityId, barangayId) => {
     try {
-      const data = await getAssignedPositions(municipalityId, barangayId);
-      setAssignedPositions(Array.isArray(data) ? data : (data?.assigned_positions || []));
+      const positions = (verifiers || [])
+        .filter(v =>
+          v.is_active &&
+          v.municipality_id === parseInt(municipalityId) &&
+          v.barangay_id === parseInt(barangayId)
+        )
+        .map(v => v.position);
+      setAssignedPositions(positions);
     } catch (err) {
-      console.error('Error fetching assigned positions:', err);
+      console.error('Error computing assigned positions:', err);
       setAssignedPositions([]);
     }
   };
 
   const filterVerifiersList = () => {
-    let filtered = [...verifiers];
+    let filtered = (verifiers || []).filter(v => v.is_active);
     if (filterMunicipality !== 'all') filtered = filtered.filter(v => v.municipality_id === parseInt(filterMunicipality));
     if (filterBarangay !== 'all') filtered = filtered.filter(v => v.barangay_id === parseInt(filterBarangay));
     setFilteredVerifiers(filtered);
@@ -173,7 +189,8 @@ const BarangayVerifierManagement = () => {
             position: addForm.position,
             first_name: addForm.first_name.trim(),
             middle_name: addForm.middle_name.trim(),
-            last_name: addForm.last_name.trim()
+            last_name: addForm.last_name.trim(),
+            is_active: true,
           });
           setAddForm({ municipality_id: '', barangay_id: '', position: '', first_name: '', middle_name: '', last_name: '' });
           setBarangays([]);
@@ -181,8 +198,14 @@ const BarangayVerifierManagement = () => {
           await fetchInitialData();
           setSuccessModal({ isOpen: true, title: 'Success', message: `Barangay Verifier "${fullName}" has been added successfully!` });
         } catch (err) {
-          setError(err.response?.data?.detail || 'Failed to add barangay verifier');
-          console.error(err);
+          const data = err.response?.data;
+          const detail =
+            (typeof data === 'string' && data) ||
+            data?.detail ||
+            Object.values(data || {})[0] ||
+            'Failed to add barangay verifier';
+          setError(detail);
+          console.error('Error adding barangay verifier:', err);
         } finally {
           setLoading(false);
         }
@@ -278,14 +301,19 @@ const BarangayVerifierManagement = () => {
       <div className="h-full px-6 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => navigate('/admin/utility')} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          {/* back button */}
+          <button type="button" onClick={() => navigate('/admin/utility')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <div>
-            <PageTitle value="VERIFIER MANAGEMENT" />
-            <p className="text-sm text-gray-600">Please fill out the form and confirm details to register a new barangay verifier</p>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 ml-4">
+            <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>BARANGAY VERIFIER MANAGEMENT</h1>
+            <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage the barangay verifiers per municipality
+            </p>
           </div>
         </div>
 
@@ -319,7 +347,7 @@ const BarangayVerifierManagement = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Select Position *</label>
                       <select value={addForm.position} onChange={handleAddPositionChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required>
-                        <option value="">Select Position</option>
+                        <option hidden selected value="">Select Position</option>
                         {VERIFIER_POSITIONS.map(p => (
                           <option key={p} value={p}>{p}</option>
                         ))}
@@ -329,7 +357,7 @@ const BarangayVerifierManagement = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Select Municipality *</label>
                         <select value={addForm.municipality_id} onChange={handleAddMunicipalityChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required>
-                          <option value="">Select Municipality</option>
+                          <option hidden selected value="">Select Municipality</option>
                           {getAvailableMunicipalitiesForForm().map(m => <option key={m.municipality_id} value={m.municipality_id}>{m.name}</option>)}
                         </select>
                       </div>
@@ -338,22 +366,22 @@ const BarangayVerifierManagement = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Select Barangay *</label>
                         <select value={addForm.barangay_id} onChange={handleAddBarangayChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required>
-                          <option value="">Select Barangay</option>
+                          <option hidden selected value="">Select Barangay</option>
                           {getAvailableBarangaysForForm().map(b => <option key={b.barangay_id} value={b.barangay_id}>{b.name}</option>)}
                         </select>
                       </div>
                     )}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-                      <input type="text" value={addForm.first_name} onChange={(e) => setAddForm(prev => ({ ...prev, first_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
+                      <input type="text" value={addForm.first_name} onChange={(e) => setAddForm(prev => ({ ...prev, first_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Middle Name</label>
-                      <input type="text" value={addForm.middle_name} onChange={(e) => setAddForm(prev => ({ ...prev, middle_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+                      <input type="text" value={addForm.middle_name} onChange={(e) => setAddForm(prev => ({ ...prev, middle_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
-                      <input type="text" value={addForm.last_name} onChange={(e) => setAddForm(prev => ({ ...prev, last_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
+                      <input type="text" value={addForm.last_name} onChange={(e) => setAddForm(prev => ({ ...prev, last_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
                     </div>
                     <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
                       {loading ? 'Adding...' : 'ADD'}
@@ -377,15 +405,15 @@ const BarangayVerifierManagement = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-                        <input type="text" value={editForm.first_name} onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
+                        <input type="text" value={editForm.first_name} onChange={(e) => setEditForm(prev => ({ ...prev, first_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Middle Name</label>
-                        <input type="text" value={editForm.middle_name} onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+                        <input type="text" value={editForm.middle_name} onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
-                        <input type="text" value={editForm.last_name} onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
+                        <input type="text" value={editForm.last_name} onChange={(e) => setEditForm(prev => ({ ...prev, last_name: toTitleCase(e.target.value) }))} className="w-full px-4 py-2 border border-gray-300 rounded-lg" required />
                       </div>
                       <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                         <div><label className="block text-sm font-medium text-gray-700">Verifier Status</label><p className="text-xs text-gray-500">Deactivate verifier if needed</p></div>
@@ -432,30 +460,45 @@ const BarangayVerifierManagement = () => {
               </div>
               <div className="space-y-2 max-h-[500px] overflow-y-auto">
                 {(() => {
-                  const list = activeTab === 'add' ? verifiers : filteredVerifiers;
-                  const groups = {};
+                  const list = (activeTab === 'add' ? verifiers : filteredVerifiers).filter(v => v.is_active);
+                  const grouped = {};
+
                   (list || []).forEach(v => {
-                    const muni = v.municipality_name || (municipalities.find(m => m.municipality_id === v.municipality_id)?.name || '—');
-                    groups[muni] = groups[muni] || [];
-                    groups[muni].push(v);
+                    const muniName = v.municipality_name || (municipalities.find(m => m.municipality_id === v.municipality_id)?.name || '—');
+                    const barangayName = v.barangay_name || (municipalities
+                      .find(m => m.municipality_id === v.municipality_id)?.barangays?.find(b => b.barangay_id === v.barangay_id)?.name || '—');
+
+                    if (!grouped[muniName]) grouped[muniName] = {};
+                    if (!grouped[muniName][barangayName]) grouped[muniName][barangayName] = [];
+                    grouped[muniName][barangayName].push(v);
                   });
-                  return Object.entries(groups).sort(([a],[b]) => a.localeCompare(b)).map(([muni, rows]) => (
-                    <div key={muni}>
-                      <div className="px-3 py-2 bg-gray-100 text-gray-700 font-semibold text-xs uppercase tracking-wide">{muni}</div>
-                      {rows.map(v => (
-                        <button
-                          key={v.id}
-                          onClick={() => activeTab === 'edit' && handleSelectVerifier(v)}
-                          className={`w-full grid grid-cols-2 gap-2 p-3 text-left text-sm transition-colors border ${
-                            activeTab === 'edit' && selectedVerifier?.id === v.id ? 'bg-blue-50 border-blue-500' : 'bg-white border-gray-200 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div>{`${v.first_name} ${v.middle_name ? v.middle_name + ' ' : ''}${v.last_name}`}</div>
-                          <div>{v.position}</div>
-                        </button>
-                      ))}
-                    </div>
-                  ));
+
+                  return Object.entries(grouped)
+                    .sort(([a],[b]) => a.localeCompare(b))
+                    .map(([muni, barangaysMap]) => (
+                      <div key={muni}>
+                        <div className="px-3 py-2 bg-gray-100 text-gray-700 font-semibold text-xs uppercase tracking-wide">{muni}</div>
+                        {Object.entries(barangaysMap)
+                          .sort(([a],[b]) => a.localeCompare(b))
+                          .map(([barangay, rows]) => (
+                            <div key={barangay}>
+                              <div className="px-4 py-2 bg-gray-50 text-gray-600 font-semibold text-xs uppercase tracking-wide">Barangay {barangay}</div>
+                              {rows.map(v => (
+                                <button
+                                  key={v.id}
+                                  onClick={() => activeTab === 'edit' && handleSelectVerifier(v)}
+                                  className={`w-full grid grid-cols-2 gap-2 p-3 text-left text-sm transition-colors border ${
+                                    activeTab === 'edit' && selectedVerifier?.id === v.id ? 'bg-blue-50 border-blue-500' : 'bg-white border-gray-200 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <div>{`${v.first_name} ${v.middle_name ? v.middle_name + ' ' : ''}${v.last_name}`}</div>
+                                  <div>{v.position}</div>
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                      </div>
+                    ));
                 })()}
               </div>
             </div>
