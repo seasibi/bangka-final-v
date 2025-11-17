@@ -11,22 +11,27 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
   const [lastReportedAt, setLastReportedAt] = useState(null);
   const lastReportedStatusRef = useRef(null);
 
+  // Fetch on mount and filter change only
   useEffect(() => {
     if (trackerId) {
       fetchTrackerHistory();
     }
   }, [trackerId, filter]);
   
-  // Auto-refresh every 30 seconds for active trackers
+  // Auto-refresh every 60 seconds (reduced from 30) for active trackers
+  // Only refresh if component is still mounted and visible
   useEffect(() => {
     if (!trackerId) return;
     
     const interval = setInterval(() => {
-      fetchTrackerHistory();
-    }, 30000); // 30 seconds
+      // Only refresh if user is still viewing (not hidden/closed)
+      if (document.visibilityState === 'visible') {
+        fetchTrackerHistory();
+      }
+    }, 60000); // 60 seconds (reduced frequency)
     
     return () => clearInterval(interval);
-  }, [trackerId, filter]);
+  }, [trackerId]); // Removed 'filter' dependency to prevent double-refresh
 
   const fetchTrackerHistory = async () => {
     try {

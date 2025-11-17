@@ -1863,8 +1863,21 @@ def gps_geojson(request):
             # Fallback to age-based status if no TrackerStatusEvent exists
             status_flag = "online" if age_seconds <= threshold_seconds else "offline"
             logger.info(f"[GPS_GEOJSON] Using age-based status for tracker {trk_id or 'unknown'}: {status_flag} (age: {age_seconds}s)")
+
+        # Override: if last GPS fix is older than threshold, force offline even if
+        # the last TrackerStatusEvent was online or reconnecting. This prevents
+        # trackers from appearing stuck in 'reconnecting' for long periods.
+        if age_seconds > threshold_seconds:
+            if status_flag != "offline":
+                logger.info(
+                    f"[GPS_GEOJSON] Forcing status 'offline' for tracker {trk_id or 'unknown'} "
+                    f"due to age {age_seconds}s > threshold {threshold_seconds}s (last status: {status_flag})"
+                )
+            status_flag = "offline"
         
         mfbr = gps.mfbr_number
+        
+
         
         # Check if boat is in violation (based on MFBR only to avoid ID type mismatches)
         is_in_violation = bool(mfbr and (mfbr in active_violations))
@@ -3483,7 +3496,52 @@ def tracker_history(request, tracker_id):
                         }
                     })
 
-        # 3) Boundary crossings
+                # Synthesize an offline event when the tracker has been silent for
+                # longer than the offline threshold, to avoid a tracker appearing
+                # permanently reconnecting/online with no recent data.
+                try:
+                    offline_threshold = timedelta(minutes=10)
+                    from django.utils import timezone as dj_tz
+
+                    last_status_event = status_events[0] if status_events else None
+                    last_status_ts = last_status_event.timestamp if last_status_event else None
+                    last_gps_ts = gps_points[0].timestamp if gps_points else None
+
+                    # Most recent activity (status or GPS)
+                    last_activity_ts = last_status_ts or last_gps_ts
+                    if last_status_ts and last_gps_ts and last_gps_ts > last_status_ts:
+                        last_activity_ts = last_gps_ts
+
+                    # Only synthesize offline if last known status is not already offline
+                    if last_activity_ts and last_status_event and last_status_event.status != 'offline':
+                        age = dj_tz.now() - last_activity_ts
+                        if age >= offline_threshold:
+                            # Prefer latest GPS location; fall back to status event location
+                            last_lat = None
+                            last_lng = None
+                            if gps_points:
+                                last_lat = float(gps_points[0].latitude)
+                                last_lng = float(gps_points[0].longitude)
+                            elif last_status_event.latitude is not None and last_status_event.longitude is not None:
+                                last_lat = float(last_status_event.latitude)
+                                last_lng = float(last_status_event.longitude)
+
+                            timeline_events.append({
+                                'id': f'status_offline_synth_{ident}',
+                                'event_type': 'offline',
+                                'title': 'Tracker Offline',
+                                'description': 'Tracker went offline (no data for 10+ minutes)',
+                                'timestamp': (last_activity_ts + offline_threshold).isoformat(),
+                                'metadata': {
+                                    'location': {'lat': last_lat, 'lng': last_lng} if last_lat is not None and last_lng is not None else None,
+                                    'session_start': last_status_event.session_start.isoformat() if last_status_event.session_start else None,
+                                    'previous_status': last_status_event.status,
+                                    'synthetic': True,
+                                }
+                            })
+                except Exception as e:
+                    logger.warning(f"tracker_history: failed to synthesize offline event for {ident}: {e}")
+
         if filter_type in ['all', 'movements']:
             # Prefer persisted crossings if we have concrete boat_id
             persisted_crossings = []
@@ -3511,33 +3569,34 @@ def tracker_history(request, tracker_id):
                     })
             else:
                 # Derive crossings from GPS points by municipality changes (works even when boat_id is 0)
-                try:
-                    from .boundary_service import boundary_service
-                    points = list(reversed(gps_points))  # chronological
-                    prev_muni = None
-                    prev_lat = None
-                    prev_lng = None
-                    for p in points:
-                        muni = boundary_service.get_municipality_at_point(p.latitude, p.longitude)
-                        if prev_muni is not None and muni and muni != prev_muni:
-                            timeline_events.append({
-                                'id': f'crossing_derived_{p.id}',
-                                'event_type': 'boundary_crossing',
-                                'title': f'Location Update: {muni}',
-                                'description': f'Boat moved from {prev_muni} to {muni}.',
-                                'timestamp': p.timestamp.isoformat(),
-                                'metadata': {
-                                    'from_municipality': prev_muni,
-                                    'to_municipality': muni,
-                                    'location': {'lat': float(p.latitude), 'lng': float(p.longitude)}
-                                }
-                            })
-                        prev_muni = muni
-                        prev_lat = p.latitude
-                        prev_lng = p.longitude
-                except Exception as e:
-                    logger.warning(f"Failed to derive crossings for {ident}: {e}")
-
+                    # Derive crossings from GPS points by municipality changes (works even when boat_id is 0)
+                    try:
+                        from .boundary_service import boundary_service
+                        points = list(reversed(gps_points))  # chronological
+                        prev_muni = None
+                        prev_lat = None
+                        prev_lng = None
+                        for p in points:
+                            muni = boundary_service.get_municipality_at_point(p.latitude, p.longitude)
+                            if prev_muni is not None and muni and muni != prev_muni:
+                                timeline_events.append({
+                                    'id': f'crossing_derived_{p.id}',
+                                    'event_type': 'boundary_crossing',
+                                    'title': f'Location Update: {muni}',
+                                    'description': f'Boat moved from {prev_muni} to {muni}.',
+                                    'timestamp': p.timestamp.isoformat(),
+                                    'metadata': {
+                                        'from_municipality': prev_muni,
+                                        'to_municipality': muni,
+                                        'location': {'lat': float(p.latitude), 'lng': float(p.longitude)}
+                                    }
+                                })
+                            prev_muni = muni
+                            prev_lat = p.latitude
+                            prev_lng = p.longitude
+                    except Exception as e:
+                        logger.warning(f"Failed to derive crossings for {ident}: {e}")
+    
         # 4) Violations (support by boat link OR MFBR string)
         if filter_type in ['all', 'violations']:
             v_q = Q()

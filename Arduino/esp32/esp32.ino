@@ -63,6 +63,8 @@ static const uint32_t BEEP_OFF_MS = 400;     // legacy pattern OFF duration
 static const uint8_t  BEEP_CYCLES = 7;       // legacy pattern cycles
 static const uint32_t BEEP_TOTAL_MS = 5600;  // robust one-shot total alarm duration (~5.6s)
 static const uint32_t BEEP_COOLDOWN_MS = 60000; // 60 seconds cooldown between beeps
+static const uint32_t VIOLATION_TIMEOUT_SECONDS = 15UL * 60UL;  // 15-minute dwell outside geofence
+static const float    IDLE_DISTANCE_THRESHOLD_METERS = 50.0f;   // movement threshold for "idle" detection
 // =============================
 
 // PPP socket client
@@ -193,6 +195,18 @@ static void lcd_spinner(const char* line1Base, const char* line2);
 
 // Secure provisioning with enhanced storage and verification
 static Preferences prefs;
+static Preferences geoPrefs;  // NVS namespace for geofence/idle state
+
+// Persistent geofence + idle state
+static bool     g_outside_state       = false;  // true if currently outside polygon
+static uint32_t g_boundary_exit_time  = 0;      // Unix time when idle-outside period started
+static bool     g_violation_triggered = false;  // avoid repeated local alerts
+static uint32_t g_last_gps_unix       = 0;      // last known GPS Unix time (seconds)
+
+static float    g_idle_base_lat       = 0.0f;   // reference point for idle-distance measurement
+static float    g_idle_base_lng       = 0.0f;
+static bool     g_has_idle_base       = false;
+
 struct TrackerConfig {
   String device_id;  // unique device identifier 
   String host;       // e.g. ngrok hostname
@@ -1138,13 +1152,264 @@ static bool http_post_position(float lat, float lng) {
   return (status >= 200 && status < 300);
 }
 
+// ======= GPS TIME → UNIX HELPERS =======
+
+static bool isLeapYear(int year) {
+  return ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
+}
+
+static uint32_t unixTimeFromYMDHMS(int year, int month, int day,
+                                   int hour, int minute, int second) {
+  static const uint8_t daysInMonth[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+  uint32_t days = 0;
+
+  for (int y = 1970; y < year; ++y) {
+    days += isLeapYear(y) ? 366UL : 365UL;
+  }
+
+  for (int m = 1; m < month; ++m) {
+    days += daysInMonth[m - 1];
+    if (m == 2 && isLeapYear(year)) {
+      days += 1;
+    }
+  }
+
+  days += (day - 1);
+
+  uint32_t seconds = days * 86400UL;
+  seconds += hour * 3600UL;
+  seconds += minute * 60UL;
+  seconds += second;
+
+  return seconds;
+}
+
+// Parse UTC time from +CGNSINF / +UGNSINF third field (YYYYMMDDHHMMSS.sss)
+static bool parse_cgnsinf_time(const String &resp, uint32_t &unixTimeOut) {
+  int idx = resp.indexOf("+CGNSINF:");
+  if (idx < 0) idx = resp.indexOf("+UGNSINF:");
+  if (idx < 0) return false;
+
+  int end = resp.indexOf('\n', idx);
+  String line = (end > idx) ? resp.substring(idx, end) : resp.substring(idx);
+
+  int colon = line.indexOf(':');
+  String data = (colon >= 0) ? line.substring(colon + 1) : line;
+
+  int token = 0;
+  int start = 0;
+
+  for (int i = 0; i <= data.length(); ++i) {
+    if (i == data.length() || data[i] == ',') {
+      String t = data.substring(start, i);
+      t.trim();
+
+      if (token == 2) {  // UTC field
+        if (t.length() < 14) return false;
+        String s = t.substring(0, 14);
+
+        int year   = s.substring(0, 4).toInt();
+        int month  = s.substring(4, 6).toInt();
+        int day    = s.substring(6, 8).toInt();
+        int hour   = s.substring(8, 10).toInt();
+        int minute = s.substring(10, 12).toInt();
+        int second = s.substring(12, 14).toInt();
+
+        unixTimeOut = unixTimeFromYMDHMS(year, month, day, hour, minute, second);
+        return true;
+      }
+
+      token++;
+      start = i + 1;
+    }
+  }
+
+  return false;
+}
+
+// ======= POLYGON GEOFENCE + MOVEMENT-AWARE IDLE DETECTION =======
+
+struct GeoPoint {
+  double lat;
+  double lon;
+};
+
+// Example polygon (replace with your real fishing ground boundary)
+static const GeoPoint GEOFENCE_POLYGON[] = {
+  {14.5920, 120.9735},
+  {14.5920, 120.9835},
+  {14.6020, 120.9835},
+  {14.6020, 120.9735}
+};
+static const size_t GEOFENCE_VERTICES = sizeof(GEOFENCE_POLYGON) / sizeof(GEOFENCE_POLYGON[0]);
+
+static double deg2rad(double deg) {
+  return deg * 3.14159265358979323846 / 180.0;
+}
+
+static double haversine_meters(double lat1, double lon1,
+                               double lat2, double lon2) {
+  const double R = 6371000.0; // Earth radius in meters
+  double phi1 = deg2rad(lat1);
+  double phi2 = deg2rad(lat2);
+  double dphi = deg2rad(lat2 - lat1);
+  double dlambda = deg2rad(lon2 - lon1);
+
+  double a = sin(dphi * 0.5) * sin(dphi * 0.5) +
+             cos(phi1) * cos(phi2) *
+             sin(dlambda * 0.5) * sin(dlambda * 0.5);
+  double c = 2.0 * atan2(sqrt(a), sqrt(1.0 - a));
+  return R * c;
+}
+
+// Ray-casting point-in-polygon
+static bool pointInPolygon(double lat, double lon,
+                           const GeoPoint* polygon, size_t vertexCount) {
+  bool inside = false;
+
+  for (size_t i = 0, j = vertexCount - 1; i < vertexCount; j = i++) {
+    double lat_i = polygon[i].lat;
+    double lon_i = polygon[i].lon;
+    double lat_j = polygon[j].lat;
+    double lon_j = polygon[j].lon;
+
+    bool intersect = ((lat_i > lat) != (lat_j > lat)) &&
+                     (lon < (lon_j - lon_i) * (lat - lat_i) / (lat_j - lat_i + 1e-12) + lon_i);
+    if (intersect) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+}
+
+// Persist outsideState + idleStartTime + last GPS position to NVS
+static void geofence_save_state() {
+  geoPrefs.putBool("outside", g_outside_state);
+  geoPrefs.putULong("idleStart", g_boundary_exit_time);
+  geoPrefs.putFloat("lastLat", g_idle_base_lat);
+  geoPrefs.putFloat("lastLng", g_idle_base_lng);
+  geoPrefs.putBool("hasLast", g_has_idle_base);
+  geoPrefs.putULong("lastUnix", g_last_gps_unix);
+  Serial.printf("[GEOFENCE] Saved: outside=%d idleStart=%u hasLast=%d lat=%.6f lon=%.6f\n",
+                g_outside_state,
+                (unsigned)g_boundary_exit_time,
+                g_has_idle_base,
+                (double)g_idle_base_lat,
+                (double)g_idle_base_lng);
+}
+
+static void geofence_load_state() {
+  g_outside_state      = geoPrefs.getBool("outside", false);
+  g_boundary_exit_time = geoPrefs.getULong("idleStart", 0);
+  g_idle_base_lat      = geoPrefs.getFloat("lastLat", 0.0f);
+  g_idle_base_lng      = geoPrefs.getFloat("lastLng", 0.0f);
+  g_has_idle_base      = geoPrefs.getBool("hasLast", false);
+  g_last_gps_unix      = geoPrefs.getULong("lastUnix", 0);
+  g_violation_triggered = false;  // re-arm on boot; we may re-alert if still in violation
+
+  Serial.printf("[GEOFENCE] Loaded: outside=%d idleStart=%u hasLast=%d lat=%.6f lon=%.6f lastUnix=%u\n",
+                g_outside_state,
+                (unsigned)g_boundary_exit_time,
+                g_has_idle_base,
+                (double)g_idle_base_lat,
+                (double)g_idle_base_lng,
+                (unsigned)g_last_gps_unix);
+}
+
+// Local violation handler (device-side; independent of backend)
+static void geofence_trigger_violation(uint32_t nowUnix, double lat, double lon) {
+  if (g_violation_triggered) return;  // only once per idle excursion
+
+  g_violation_triggered = true;
+
+  Serial.println("***** GEOFENCE VIOLATION (MOVEMENT-IDLE) *****");
+  Serial.printf("time=%u lat=%.6f lon=%.6f\n", (unsigned)nowUnix, lat, lon);
+  Serial.println("*********************************************");
+
+  lcd_show("ALERT!", "Idle 15m Outside");
+  beep_start(BEEP_CYCLES, BEEP_ON_MS, BEEP_OFF_MS);
+}
+
+// Core state machine:
+// - Track when boat is OUTSIDE polygon
+// - If distance between consecutive fixes <= 50m for 15+ minutes while outside -> violation
+// - Any step > 50m while outside resets idle timer
+static void geofence_process(double lat, double lon, uint32_t nowUnix) {
+  if (nowUnix == 0) {
+    Serial.println("[GEOFENCE] GPS time not available; skipping.");
+    return;
+  }
+
+  bool inside = pointInPolygon(lat, lon, GEOFENCE_POLYGON, GEOFENCE_VERTICES);
+
+  if (inside) {
+    if (g_outside_state || g_boundary_exit_time != 0 || g_has_idle_base) {
+      g_outside_state       = false;
+      g_boundary_exit_time  = 0;
+      g_has_idle_base       = false;
+      g_violation_triggered = false;
+      geofence_save_state();
+      Serial.println("[GEOFENCE] Re-entered polygon; timers cleared.");
+    }
+    return;
+  }
+
+  // Outside polygon from here on
+  if (!g_outside_state) {
+    g_outside_state       = true;
+    g_boundary_exit_time  = 0;     // will start when we first confirm idle
+    g_violation_triggered = false;
+    // do not save yet; we'll save after updating last position
+    Serial.println("[GEOFENCE] Just left polygon; entering outside state.");
+  }
+
+  double stepDist = 0.0;
+  bool   havePrev = g_has_idle_base;
+
+  if (havePrev) {
+    stepDist = haversine_meters(g_idle_base_lat, g_idle_base_lng, lat, lon);
+  }
+
+  bool isIdleStep = havePrev && (stepDist <= IDLE_DISTANCE_THRESHOLD_METERS);
+
+  if (!havePrev) {
+    // First outside fix (after reset/reboot or after coming from inside): store as baseline
+    Serial.println("[GEOFENCE] First outside fix; waiting for next fix to evaluate movement.");
+  } else if (!isIdleStep) {
+    // Movement detected: reset idle timer
+    Serial.printf("[GEOFENCE] Movement detected: %.1f m > %.1f m; idle timer reset.\n",
+                  stepDist, (double)IDLE_DISTANCE_THRESHOLD_METERS);
+    g_boundary_exit_time  = 0;
+    g_violation_triggered = false;
+  } else {
+    // Idle step while outside polygon
+    if (g_boundary_exit_time == 0) {
+      g_boundary_exit_time = nowUnix;  // start idle timer
+      Serial.printf("[GEOFENCE] Idle-outside period started at %u\n", (unsigned)g_boundary_exit_time);
+    } else {
+      uint32_t elapsed = nowUnix - g_boundary_exit_time;
+      Serial.printf("[GEOFENCE] Idle outside for %u seconds\n", (unsigned)elapsed);
+      if (!g_violation_triggered && elapsed >= VIOLATION_TIMEOUT_SECONDS) {
+        geofence_trigger_violation(nowUnix, lat, lon);
+      }
+    }
+  }
+
+  // Update last-known outside fix for next step and persist
+  g_idle_base_lat  = (float)lat;
+  g_idle_base_lng  = (float)lon;
+  g_has_idle_base  = true;
+  geofence_save_state();
+}
+
 void setup() {
   Serial.begin(115200);
   delay(400);
   Serial.println("\n[ESP32 PPPoS] Booting...");
   Serial.println("\n=== SIMPLIFIED PROVISIONING ===");
   Serial.println("Step 1: DEVICE_ID=your-tracker-id");
-  Serial.println("Step 2: TOKEN=your-device-token");
+    Serial.println("Step 2: TOKEN=your-device-token");
   Serial.println("Step 3: PROVISION");
   Serial.println("\nOptional commands:");
   Serial.println("- INFO (show current config)");
@@ -1158,6 +1423,14 @@ void setup() {
 
   // Load stored provisioning
   cfg_load();
+
+  // Open geofence NVS namespace and load persistent geofence/idle state
+  if (geoPrefs.begin("geofence", false)) {  // read-write
+    geofence_load_state();
+  } else {
+    Serial.println("[GEOFENCE] ERROR: Failed to open NVS namespace 'geofence'");
+  }
+
   // Print current config for provisioning verification (frontend expects [INFO] TOKEN=...)
   Serial.print("[INFO] TOKEN=");
   Serial.println(g_cfg.token.length() ? g_cfg.token : "(empty)");
@@ -1328,7 +1601,7 @@ void loop() {
 
   // Before reading coords, optionally query CGNSINF to show status on LCD
   int run = 0, fix = 0; float latTry = 0, lngTry = 0; float hdopSeen = 0; int satsUsed = 0;
-  bool haveCGNS = false;
+   bool haveCGNS = false;
   if (shouldEscapeForGps) {
     ensure_command_mode();
     lcd_spinner("GPS: Query", "CGNSINF...");
@@ -1337,7 +1610,19 @@ void loop() {
     Serial.print("[GNSS] ");
     Serial.println(cgns);
     /* gnss_diagnostics(); */  // Skip extra diagnostics each loop to save time
+
+    // Parse location + HDOP/sats
     haveCGNS = parse_cgnsinf_ex(cgns, run, fix, latTry, lngTry, hdopSeen, satsUsed);
+
+    // Parse GPS UTC → Unix timestamp (reconnect-proof timing)
+    uint32_t unixTs = 0;
+    if (parse_cgnsinf_time(cgns, unixTs)) {
+      g_last_gps_unix = unixTs;
+      // Persist last GPS time so idle timer survives reboots
+      geoPrefs.putULong("lastUnix", g_last_gps_unix);
+      Serial.printf("[GNSS] Unix time parsed: %u\n", (unsigned)g_last_gps_unix);
+    }
+
     if (haveCGNS) {
       if (run == 1 && fix == 0) {
         char l2[17]; snprintf(l2, sizeof(l2), "u:%d hd:%.1f", satsUsed, hdopSeen);
@@ -1351,6 +1636,7 @@ void loop() {
   float lat = 0.0f, lng = 0.0f;
   bool got = false;
   
+  // Try to get current GPS fix
   // Try to get current GPS fix
   if (haveCGNS && run == 1 && fix == 1 && (latTry != 0.0f || lngTry != 0.0f)) {
     lat = latTry; lng = lngTry; got = true;
@@ -1378,6 +1664,13 @@ void loop() {
     lcd_show("GPS: FIX", line);
     delay(200);
     lcd_show("GPS: FIX", line2);
+
+    // Run reconnect-proof, movement-aware geofence logic
+    if (g_last_gps_unix > 0) {
+      geofence_process(lat, lng, g_last_gps_unix);
+    } else {
+      Serial.println("[GEOFENCE] GPS time not yet valid; skipping geofence update.");
+    }
   } else {
     // No current fix - try to use last known position
     if (g_has_last_known_position) {

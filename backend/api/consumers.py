@@ -183,6 +183,12 @@ class GPSConsumer(AsyncWebsocketConsumer):
                 else:
                     # Fallback to age-based status if no TrackerStatusEvent exists
                     status = "online" if age_seconds <= threshold_seconds else "offline"
+
+                # Override: if last GPS fix is older than threshold, force offline even if
+                # the last TrackerStatusEvent was online/reconnecting, so live map matches
+                # the age-based offline behavior.
+                if age_seconds > threshold_seconds and status != "offline":
+                    status = "offline"
                 
                 in_violation = False
                 if resolved_mfbr and resolved_mfbr in active_mfbrs:
