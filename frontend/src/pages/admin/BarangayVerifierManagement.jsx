@@ -435,7 +435,6 @@ const BarangayVerifierManagement = () => {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-md p-6">
               <div className="flex items-center gap-2 mb-4">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 <h3 className="text-lg font-semibold">Current List Of Barangay Verifiers for {filterMunicipality !== 'all' ? municipalities.find(m => m.municipality_id === parseInt(filterMunicipality))?.name : 'All'}, {filterBarangay !== 'all' ? 'Barangay ' + municipalities.find(m => m.municipality_id === parseInt(filterMunicipality))?.barangays?.find(b => b.barangay_id === parseInt(filterBarangay))?.name : ''}</h3>
               </div>
 
@@ -458,7 +457,7 @@ const BarangayVerifierManagement = () => {
                 <div>Full Name</div>
                 <div>Position</div>
               </div>
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">
+              <div className="space-y-2 max-h-[357px] overflow-y-auto">
                 {(() => {
                   const list = (activeTab === 'add' ? verifiers : filteredVerifiers).filter(v => v.is_active);
                   const grouped = {};

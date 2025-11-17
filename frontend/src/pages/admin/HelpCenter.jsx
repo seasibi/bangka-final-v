@@ -324,7 +324,7 @@ const HelpCenter = () => {
               Use this page to learn how to use the system
             </p>
           </div>
-
+        </div>
 
           {/* Search Bar */}
           <div className="mb-8">
@@ -339,7 +339,6 @@ const HelpCenter = () => {
               />
             </div>
           </div>
-        </div>
 
         {/* Quick Links — horizontal scroll with arrows */}
         <div className="mb-12 relative w-[160vh] sm:w-[120vh] md:w-[160vh] lg:w-[160vh] xl:w-[140vh] 2xl:w-[90vh]">        <div

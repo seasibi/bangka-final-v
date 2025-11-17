@@ -793,334 +793,352 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
             <p className="text-gray-500">No gear assignments found.</p>
           )}
         </Section>
-        
+
         {/* Certification */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Certification
-          </h2>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+        <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+          Certification
+        </h2>
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
           <p className="text-gray-700 mb-4 italic">
             I hereby certify that all information contained herein is true and correct.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Name of Applicant</label>
-              <p className="text-base font-semibold text-gray-900">
-                {boat?.fisherfolk
-                  ? `${boat.fisherfolk.salutations ? boat.fisherfolk.salutations + ' ' : ''}${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.middle_name ? boat.fisherfolk.middle_name.charAt(0).toUpperCase() + '. ' : ''}${boat.fisherfolk.last_name || ''}`.trim() || 'Not specified'
-                  : (boat?.owner_name || 'Not specified')}
+              <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={boat?.fisherfolk
+                    ? formatNameWithMiddleInitial(
+                        boat.fisherfolk.first_name,
+                        boat.fisherfolk.middle_name,
+                        boat.fisherfolk.last_name
+                      ) || 'Not specified'
+                    : boat?.owner_name || 'Not specified'}
+                  readOnly
+                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Automatic name from fisherfolk data
               </p>
             </div>
             <div>
               <label className="block text-sm text-gray-600 mb-1">Date of Application</label>
-              <p className="text-base font-semibold text-gray-900">
-                {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                            <div className="relative mt-1">
+                <input
+                  type="text"
+                  value={new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  readOnly
+                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Automatic date
               </p>
             </div>
           </div>
-          </div>
-
-      {/* Signatories */}
-      <Section title="Signatories">
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="text-center">
-              <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                {signatories.fisheryCoordinator
-                  ? formatNameWithMiddleInitial(
-                    signatories.fisheryCoordinator.first_name,
-                    signatories.fisheryCoordinator.middle_name,
-                    signatories.fisheryCoordinator.last_name
-                  ).toUpperCase()
-                  : 'NOT ASSIGNED'}
-              </div>
-              <div className="text-xs text-gray-600">Municipal Fishery Coordinator</div>
-            </div>
-            <div className="text-center">
-              <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                {signatories.notedBy
-                  ? formatNameWithMiddleInitial(
-                    signatories.notedBy.first_name,
-                    signatories.notedBy.middle_name,
-                    signatories.notedBy.last_name
-                  ).toUpperCase()
-                  : 'NOT ASSIGNED'}
-              </div>
-              <div className="text-xs text-gray-600">
-                {signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}
-              </div>
-            </div>
-          </div>
         </div>
-      </Section>
-    </div>
 
-  {/* Modals */ }
-
-{/* Deactivate Modal */ }
-<AnimatePresence>
-  {isDeactivateModalOpen && (
-    <>
-      <Motion.div
-        className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      />
-      <Motion.div
-        className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
-        initial={{ y: -50, opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: -50, opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.25 }}
-      >
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
-          <h2 className="text-lg font-semibold mb-2">Deactivate Boat</h2>
-          <p className="mb-4">{`Are you sure you want to deactivate ${boat.boat_name}? This only deactivates the boat under the current owner.`}</p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setIsDeactivateModalOpen(false)}
-              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  await archiveBoat(id);
-                  setSuccessTitle("Boat Deactivated");
-                  setSuccessMessage("✅ The boat has been successfully deactivated.");
-                  setIsSuccessModalOpen(true);
-                  setIsDeactivateModalOpen(false);
-                  const response = await axios.get(`${API_BASE}/api/boats/${id}/`);
-                  setBoat(response.data);
-                } catch (err) {
-                  console.error("Error deactivating boat:", err);
-                  setSuccessTitle("Error");
-                  setSuccessMessage("❌ Failed to deactivate boat.");
-                  setIsSuccessModalOpen(true);
-                }
-              }}
-              className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
-            >
-              Deactivate
-            </button>
-          </div>
-        </div>
-      </Motion.div>
-    </>
-  )}
-</AnimatePresence>
-
-{/* Edit Modal */ }
-<AnimatePresence>
-  {isEditModalOpen && (
-    <>
-      {/* Overlay */}
-      <Motion.div
-        className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      />
-
-      {/* Modal Content */}
-      <Motion.div
-        className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
-        initial={{ y: -50, opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: -50, opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.25 }}
-      >
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
-          <h2 className="text-lg font-semibold mb-2">{`Edit ${boat.boat_name}`}</h2>
-          <p className="mb-4">{`Edit ${boat.boat_name}'s info?`}</p>
-
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setIsEditModalOpen(false)}
-              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleEditConfirm}
-              className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      </Motion.div>
-    </>
-  )}
-</AnimatePresence>
-
-{/* Tracker Modal */ }
-<AnimatePresence>
-  {isTrackerModalOpen && (
-    <>
-      {/* Overlay */}
-      <Motion.div
-        className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-      />
-
-      {/* Modal Content */}
-      <Motion.div
-        className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
-        initial={{ y: -50, opacity: 0, scale: 0.95 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: -50, opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.25 }}
-      >
-        <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
-          <h2 className="text-lg font-semibold mb-2">
-            {boat.tracker ? "Unassign Tracker" : "Assign Tracker"}
-          </h2>
-          <p className="mb-4">
-            {boat.tracker
-              ? "Are you sure you want to unassign this tracker?"
-              : "Select a tracker to assign to this boat."}
-          </p>
-
-          {!boat.tracker && (
-            <div className="mb-4 mt-2">
-              <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-md">
-                {trackers.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">
-                    No available trackers found for this municipality.
-                  </div>
-                ) : (
-                  trackers.map((tracker, index) => {
-                    const isNewest = index === 0;
-                    const isSelected = selectedTracker === tracker.BirukBilugID;
-                    const dateAdded = tracker.date_added
-                      ? new Date(tracker.date_added).toLocaleString('en-US', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })
-                      : 'N/A';
-
-                    return (
-                      <div
-                        key={tracker.BirukBilugID}
-                        onClick={() => setSelectedTracker(tracker.BirukBilugID)}
-                        className={`p-3 border-b border-gray-200 cursor-pointer transition-all duration-200 ${
-                          isSelected
-                            ? 'bg-blue-100 border-l-4 border-l-blue-600'
-                            : isNewest
-                            ? 'bg-green-50 hover:bg-green-100 border-l-4 border-l-green-500'
-                            : 'hover:bg-gray-50'
-                        }`}
-                        title={isNewest ? 'Latest tracker added' : ''}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-semibold text-gray-900">
-                                Tracker ID: {tracker.BirukBilugID}
-                              </span>
-                              {isNewest && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-600 text-white">
-                                  ✨ Latest
-                                </span>
-                              )}
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {tracker.status}
-                              </span>
-                            </div>
-                            <div className="text-sm text-gray-600">
-                              📍 {tracker.municipality}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              🕒 Added: {dateAdded}
-                            </div>
-                          </div>
-                          {isSelected && (
-                            <div className="ml-2">
-                              <svg
-                                className="w-5 h-5 text-blue-600"
-                                fill="currentColor"
-                                viewBox="0 0 20 20"
-                              >
-                                <path
-                                  fillRule="evenodd"
-                                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                                  clipRule="evenodd"
-                                />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {selectedTracker && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-sm font-medium text-blue-900">
-                    Selected: Tracker {selectedTracker}
-                  </p>
+        {/* Signatories */}
+        <Section title="Signatories">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="text-center">
+                <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
+                  {signatories.fisheryCoordinator
+                    ? formatNameWithMiddleInitial(
+                      signatories.fisheryCoordinator.first_name,
+                      signatories.fisheryCoordinator.middle_name,
+                      signatories.fisheryCoordinator.last_name
+                    ).toUpperCase()
+                    : 'NOT ASSIGNED'}
                 </div>
-              )}
+                <div className="text-xs text-gray-600">Municipal Fishery Coordinator</div>
+              </div>
+              <div className="text-center">
+                <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
+                  {signatories.notedBy
+                    ? formatNameWithMiddleInitial(
+                      signatories.notedBy.first_name,
+                      signatories.notedBy.middle_name,
+                      signatories.notedBy.last_name
+                    ).toUpperCase()
+                    : 'NOT ASSIGNED'}
+                </div>
+                <div className="text-xs text-gray-600">
+                  {signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}
+                </div>
+              </div>
             </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setIsTrackerModalOpen(false)}
-              className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  if (boat.tracker) {
-                    await unassignTrackerFromBoat(boat.tracker.BirukBilugID);
-                    setSuccessTitle("Tracker Unassigned");
-                    setSuccessMessage(
-                      "✅ The tracker has been successfully unassigned."
-                    );
-                  } else {
-                    if (!selectedTracker) return;
-                    await assignTrackerToBoat(boat.mfbr_number, selectedTracker);
-                    setSuccessTitle("Tracker Assigned");
-                    setSuccessMessage(
-                      "✅ The tracker has been successfully assigned."
-                    );
-                  }
-                  setIsSuccessModalOpen(true);
-                  setIsTrackerModalOpen(false);
-
-                  const response = await axios.get(`${API_BASE}/api/boats/${id}/`);
-                  setBoat(response.data);
-                } catch (error) {
-                  console.error("Error assigning/unassigning tracker:", error);
-                  setSuccessTitle("Error");
-                  setSuccessMessage("❌ Failed to update tracker assignment.");
-                  setIsSuccessModalOpen(true);
-                }
-              }}
-              className={`px-4 py-2 rounded ${
-                boat.tracker ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
-              } text-white`}
-            >
-              {boat.tracker ? "Unassign" : "Assign"}
-            </button>
           </div>
-        </div>
-      </Motion.div>
-    </>
-  )}
-</AnimatePresence>
+        </Section>
+      </div>
+
+      {/* Modals */}
+
+      {/* Deactivate Modal */}
+      <AnimatePresence>
+        {isDeactivateModalOpen && (
+          <>
+            <Motion.div
+              className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+            <Motion.div
+              className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
+              initial={{ y: -50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -50, opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
+                <h2 className="text-lg font-semibold mb-2">Deactivate Boat</h2>
+                <p className="mb-4">{`Are you sure you want to deactivate ${boat.boat_name}? This only deactivates the boat under the current owner.`}</p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setIsDeactivateModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await archiveBoat(id);
+                        setSuccessTitle("Boat Deactivated");
+                        setSuccessMessage("✅ The boat has been successfully deactivated.");
+                        setIsSuccessModalOpen(true);
+                        setIsDeactivateModalOpen(false);
+                        const response = await axios.get(`${API_BASE}/api/boats/${id}/`);
+                        setBoat(response.data);
+                      } catch (err) {
+                        console.error("Error deactivating boat:", err);
+                        setSuccessTitle("Error");
+                        setSuccessMessage("❌ Failed to deactivate boat.");
+                        setIsSuccessModalOpen(true);
+                      }
+                    }}
+                    className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                  >
+                    Deactivate
+                  </button>
+                </div>
+              </div>
+            </Motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <>
+            {/* Overlay */}
+            <Motion.div
+              className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+
+            {/* Modal Content */}
+            <Motion.div
+              className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
+              initial={{ y: -50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -50, opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
+                <h2 className="text-lg font-semibold mb-2">{`Edit ${boat.boat_name}`}</h2>
+                <p className="mb-4">{`Edit ${boat.boat_name}'s info?`}</p>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditConfirm}
+                    className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </Motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Tracker Modal */}
+      <AnimatePresence>
+        {isTrackerModalOpen && (
+          <>
+            {/* Overlay */}
+            <Motion.div
+              className="fixed inset-0 z-40 top-20 bottom-12 left-79 bg-white/30 backdrop-blur-sm"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+
+            {/* Modal Content */}
+            <Motion.div
+              className="fixed inset-0 flex items-center justify-center p-4 z-50 pointer-events-none"
+              initial={{ y: -50, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -50, opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full pointer-events-auto">
+                <h2 className="text-lg font-semibold mb-2">
+                  {boat.tracker ? "Unassign Tracker" : "Assign Tracker"}
+                </h2>
+                <p className="mb-4">
+                  {boat.tracker
+                    ? "Are you sure you want to unassign this tracker?"
+                    : "Select a tracker to assign to this boat."}
+                </p>
+
+                {!boat.tracker && (
+                  <div className="mb-4 mt-2">
+                    <div className="max-h-96 overflow-y-auto border border-gray-300 rounded-md">
+                      {trackers.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          No available trackers found for this municipality.
+                        </div>
+                      ) : (
+                        trackers.map((tracker, index) => {
+                          const isNewest = index === 0;
+                          const isSelected = selectedTracker === tracker.BirukBilugID;
+                          const dateAdded = tracker.date_added
+                            ? new Date(tracker.date_added).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })
+                            : 'N/A';
+
+                          return (
+                            <div
+                              key={tracker.BirukBilugID}
+                              onClick={() => setSelectedTracker(tracker.BirukBilugID)}
+                              className={`p-3 border-b border-gray-200 cursor-pointer transition-all duration-200 ${isSelected
+                                  ? 'bg-blue-100 border-l-4 border-l-blue-600'
+                                  : isNewest
+                                    ? 'bg-green-50 hover:bg-green-100 border-l-4 border-l-green-500'
+                                    : 'hover:bg-gray-50'
+                                }`}
+                              title={isNewest ? 'Latest tracker added' : ''}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-semibold text-gray-900">
+                                      Tracker ID: {tracker.BirukBilugID}
+                                    </span>
+                                    {isNewest && (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-600 text-white">
+                                        ✨ Latest
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                      {tracker.status}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-gray-600">
+                                    📍 {tracker.municipality}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    🕒 Added: {dateAdded}
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <div className="ml-2">
+                                    <svg
+                                      className="w-5 h-5 text-blue-600"
+                                      fill="currentColor"
+                                      viewBox="0 0 20 20"
+                                    >
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    {selectedTracker && (
+                      <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm font-medium text-blue-900">
+                          Selected: Tracker {selectedTracker}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setIsTrackerModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        if (boat.tracker) {
+                          await unassignTrackerFromBoat(boat.tracker.BirukBilugID);
+                          setSuccessTitle("Tracker Unassigned");
+                          setSuccessMessage(
+                            "✅ The tracker has been successfully unassigned."
+                          );
+                        } else {
+                          if (!selectedTracker) return;
+                          await assignTrackerToBoat(boat.mfbr_number, selectedTracker);
+                          setSuccessTitle("Tracker Assigned");
+                          setSuccessMessage(
+                            "✅ The tracker has been successfully assigned."
+                          );
+                        }
+                        setIsSuccessModalOpen(true);
+                        setIsTrackerModalOpen(false);
+
+                        const response = await axios.get(`${API_BASE}/api/boats/${id}/`);
+                        setBoat(response.data);
+                      } catch (error) {
+                        console.error("Error assigning/unassigning tracker:", error);
+                        setSuccessTitle("Error");
+                        setSuccessMessage("❌ Failed to update tracker assignment.");
+                        setIsSuccessModalOpen(true);
+                      }
+                    }}
+                    className={`px-4 py-2 rounded ${boat.tracker ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"
+                      } text-white`}
+                  >
+                    {boat.tracker ? "Unassign" : "Assign"}
+                  </button>
+                </div>
+              </div>
+            </Motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <SuccessModal
         isOpen={isSuccessModalOpen}

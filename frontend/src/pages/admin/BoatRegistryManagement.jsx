@@ -35,7 +35,7 @@ const PaginationControls = ({ page, setPage, pageSize, total }) => {
       <button
         onClick={() => setPage((p) => Math.max(1, p - 1))}
         disabled={page <= 1}
-        className="px-2 py-1 border rounded disabled:opacity-50"
+        className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50"
       >
         Prev
       </button>
@@ -44,7 +44,7 @@ const PaginationControls = ({ page, setPage, pageSize, total }) => {
           <button
             key={p}
             onClick={() => setPage(p)}
-            className={`px-2 py-1 rounded ${p === page ? 'bg-blue-600 text-white' : 'border'}`}
+            className={`px-2 py-1 rounded ${p === page ? 'bg-blue-600 border-blue-500 border-1 border-b-2 text-white' : 'border border-blue-500 border-1 border-b-2'}`}
           >
             {p}
           </button>
@@ -54,7 +54,7 @@ const PaginationControls = ({ page, setPage, pageSize, total }) => {
       <button
         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
         disabled={page >= totalPages}
-        className="px-2 py-1 border rounded disabled:opacity-50"
+        className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50"
       >
         Next
       </button>
@@ -238,7 +238,7 @@ const AdminBoatRegistryManagement = () => {
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value))}
-                className="border rounded px-2 py-1 text-sm"
+                className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm"
               >
                 {pageOptions.map((opt) => (
                   <option key={opt} value={opt}>
@@ -248,13 +248,13 @@ const AdminBoatRegistryManagement = () => {
               </select>
               <div className="text-sm text-gray-600">Total: {filteredBoats.length}</div>
               <label className="ml-4 text-sm text-gray-700">Status:</label>
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border rounded px-2 py-1 text-sm">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm">
                 <option value="all">All</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
               <label className="ml-4 text-sm text-gray-700">Tracker:</label>
-              <select value={trackerFilter} onChange={(e) => setTrackerFilter(e.target.value)} className="border rounded px-2 py-1 text-sm">
+              <select value={trackerFilter} onChange={(e) => setTrackerFilter(e.target.value)} className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm">
                 <option value="all">All</option>
                 <option value="with">With tracker</option>
                 <option value="without">Without tracker</option>

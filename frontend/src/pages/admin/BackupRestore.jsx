@@ -53,14 +53,14 @@ const BackupRestore = () => {
     for (let i = 1; i <= totalPages; i++) pages.push(i);
     return (
       <div className="flex items-center gap-2">
-        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-2 py-1 border rounded disabled:opacity-50">Prev</button>
+        <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50">Prev</button>
         <div className="hidden sm:flex items-center gap-1">
           {pages.slice(0, 10).map((p) => (
-            <button key={p} onClick={() => setPage(p)} className={`px-2 py-1 rounded ${p === page ? 'bg-blue-600 text-white' : 'border'}`}>{p}</button>
+            <button key={p} onClick={() => setPage(p)} className={`px-2 py-1 border-blue-500 border-1 border-b-2 rounded ${p === page ? 'bg-blue-600 text-white' : 'border'}`}>{p}</button>
           ))}
           {totalPages > 10 && <span className="px-2">...</span>}
         </div>
-        <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-2 py-1 border rounded disabled:opacity-50">Next</button>
+        <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50">Next</button>
       </div>
     );
   };
@@ -251,17 +251,21 @@ const BackupRestore = () => {
   return (
     <div className="h-full bg-gray-50">
       <div className="h-full px-4 py-6 pb-20" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-                <div className="flex justify-between items-center mb-6">
-                 <div className="flex items-center gap-4">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/admin/utility')}
-                    className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200"
-                  >
-                    <FaChevronLeft className="w-5 h-5" />
-                  </button>
-                  <PageTitle value="Database Backup & Restore" />
-                  </div> 
+        <div className="flex items-center gap-4 mt-4 mb-4">
+{/* back button */}
+          <button type="button" onClick={() => navigate('/admin/utility')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </button>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 ml-4">
+            <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>BARANGAY VERIFIER MANAGEMENT</h1>
+            <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage the barangay verifiers per municipality
+            </p>
+          </div>
 </div>
 
 <AlertModal
@@ -387,7 +391,7 @@ const BackupRestore = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <label className="text-sm text-gray-700">Rows per page:</label>
-                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="border rounded px-2 py-1 text-sm">
+                <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm">
                   {pageOptions.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
                 <div className="text-sm text-gray-600">Total: {backupHistory.length}</div>

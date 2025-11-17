@@ -373,14 +373,19 @@ const SignatoriesManagement = () => {
     <div className="h-full bg-gray-50">
       <div className="h-full px-6 py-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
         <div className="flex items-center gap-4 mb-6">
-          <button onClick={() => navigate('/admin/utility')} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
-            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          {/* back button */}
+          <button type="button" onClick={() => navigate('/admin/utility')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <div>
-            <PageTitle value="SIGNATORIES MANAGEMENT" />
-            <p className="text-sm text-gray-600">Please fill out the form and confirm details to register a new signatories</p>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 ml-4">
+            <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>SIGNATORIES MANAGEMENT</h1>
+            <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Please fill out the form and confirm details to register a new signatories
+            </p>
           </div>
         </div>
 

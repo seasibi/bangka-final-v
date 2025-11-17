@@ -364,7 +364,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       if (match) {
         const code = match[1];
         const number = match[2];
-        
+
         // Municipality codes for parsing
         const codes = {
           "Agoo": "AO", "Aringay": "AR", "Bacnotan": "BC", "Balaoan": "BL",
@@ -372,12 +372,12 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           "Rosario": "RS", "San Fernando City": "SF", "San Juan": "SJ",
           "Santo Tomas": "ST", "Sudipen": "SD"
         };
-        
+
         // Find municipality by code
         const municipality = Object.keys(codes).find(
           key => codes[key] === code
         );
-        
+
         if (municipality) {
           setMfbrMunicipality(municipality);
           setMfbrNumber(number);
@@ -446,19 +446,19 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         const allSignatories = municipality_id
           ? await getSignatories({ municipality_id })
           : await getSignatories();
-        
+
         // Find Municipal Fishery Coordinator (for Enumerator)
         const fisheryCoordinator = allSignatories.find(
-          sig => sig.position === 'Municipal Fishery Coordinator' && 
-                 (sig.municipality?.id === municipality_id || sig.municipality_id === municipality_id)
+          sig => sig.position === 'Municipal Fishery Coordinator' &&
+            (sig.municipality?.id === municipality_id || sig.municipality_id === municipality_id)
         );
-        
+
         // Find Noted By (Priority: Municipal Agriculturist > Provincial Agriculturist)
         const municipalAgriculturist = allSignatories.find(
-          sig => sig.position === 'Municipal Agriculturist' && 
-                 (sig.municipality?.id === municipality_id || sig.municipality_id === municipality_id)
+          sig => sig.position === 'Municipal Agriculturist' &&
+            (sig.municipality?.id === municipality_id || sig.municipality_id === municipality_id)
         );
-        
+
         // If no municipal agriculturist, try to get provincial agriculturist
         let notedBy = municipalAgriculturist;
         if (!notedBy) {
@@ -466,7 +466,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           const provincialSigs = await getSignatories();
           notedBy = provincialSigs.find(sig => sig.position === 'Provincial Agriculturist');
         }
-        
+
         setSignatories({
           fisheryCoordinator,
           notedBy
@@ -483,7 +483,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
 
   const handleFisherfolkSelect = (fisherfolk) => {
     const regNum = fisherfolk.registration_number || "";
-    
+
     // Toggle selection: if clicking the same fisherfolk, unselect it
     if (selectedFisherfolkId === regNum) {
       setSelectedFisherfolkId(null);
@@ -551,6 +551,8 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   };
 
   const handleConfirmSubmit = async () => {
+    // Close the confirm modal before running the full submit flow
+    setShowConfirmModal(false);
     setLoading(true);
     try {
       // --------- 1. Boat creation (FormData, with file) ---------
@@ -607,12 +609,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
 
       Object.entries(formData).forEach(([key, value]) => {
         const mapEntry = GEAR_MAP[key];
-        if (!mapEntry) return; // skip if no mapping
 
-        // Normalize the name from mapEntry for lookup
-        const lookupName = norm(mapEntry.name);
-
-        if (mapEntry.kind === "type" && value === true) {
+        // 🔹 Handle gear TYPES from their checkbox fields
+        if (mapEntry && mapEntry.kind === "type" && value === true) {
+          const lookupName = norm(mapEntry.name);
           const typeId = typeIdByName.get(lookupName);
           if (typeId) {
             assignments.push({
@@ -625,14 +625,22 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           }
         }
 
-        if (
-          mapEntry.kind === "subtype" &&
-          value !== null &&
-          value !== undefined &&
-          value !== ""
-        ) {
+        // 🔹 Handle gear SUBTYPES from their quantity fields ("*_no"),
+        // similar to EditBoat.updateBoatGears
+        if (key.endsWith("_no")) {
+          const baseField = key.replace("_no", "");
+          const baseEntry = GEAR_MAP[baseField];
+          if (!baseEntry || baseEntry.kind !== "subtype") return;
+
+          // Only create a subtype assignment if the corresponding checkbox is checked
+          const isChecked = !!formData[baseField];
+          if (!isChecked) return;
+
+          const qty = parseInt(value, 10) || 0;
+          if (!qty) return; // skip zero/empty quantities
+
+          const lookupName = norm(baseEntry.name);
           const subId = subtypeIdByName.get(lookupName);
-          const qty = parseInt(value, 10) || 1;
           if (subId) {
             assignments.push({
               boat_gear_assignment: gearAssignment.id,
@@ -641,7 +649,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
               is_present: true,
             });
           } else {
-            console.warn("⚠️ Gear subtype not found:", mapEntry.name);
+            console.warn("⚠️ Gear subtype not found:", baseEntry.name);
           }
         }
       });
@@ -707,11 +715,11 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         err.response?.data || err.message
       );
       let errorMsg = "Failed to submit boat registration.";
-      
+
       // Parse error response for better display
       if (err?.response?.data) {
         const errorData = err.response.data;
-        
+
         // Handle field-specific errors (e.g., boat_name unique constraint)
         if (typeof errorData === 'object' && !Array.isArray(errorData)) {
           const errorMessages = [];
@@ -721,7 +729,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
               .split('_')
               .map(word => word.charAt(0).toUpperCase() + word.slice(1))
               .join(' ');
-            
+
             if (Array.isArray(messages)) {
               errorMessages.push(`${formattedField}: ${messages.join(', ')}`);
             } else {
@@ -737,7 +745,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       } else if (err.message) {
         errorMsg = err.message;
       }
-      
+
       // Show error in modal
       setAlertModal({
         isOpen: true,
@@ -752,7 +760,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   const applyRegisterAnother = (reuseDetails) => {
     try {
       console.log("[applyRegisterAnother] reuseDetails=", reuseDetails);
-    } catch (e) {}
+    } catch (e) { }
     // Base fields always retained (context and owner)
     const baseKept = {
       application_date: formData.application_date,
@@ -770,47 +778,47 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     const snap = lastSubmissionRef.current?.snapshot || {};
     const technical = reuseDetails
       ? {
-          boat_type: snap.boat_type || "",
-          material_used: snap.material_used || "",
-          built_place: snap.built_place || "",
-          built_year: snap.built_year || "",
-          type_of_ownership: snap.type_of_ownership || "",
-          engine_make: snap.engine_make || "",
-          horsepower: snap.horsepower || "",
-          no_fishers: snap.no_fishers || "",
-          registered_length: snap.registered_length || "",
-          registered_breadth: snap.registered_breadth || "",
-          registered_depth: snap.registered_depth || "",
-          tonnage_length: snap.tonnage_length || "",
-          tonnage_breadth: snap.tonnage_breadth || "",
-          tonnage_depth: snap.tonnage_depth || "",
-          gross_tonnage: snap.gross_tonnage || "",
-          net_tonnage: snap.net_tonnage || "",
-        }
+        boat_type: snap.boat_type || "",
+        material_used: snap.material_used || "",
+        built_place: snap.built_place || "",
+        built_year: snap.built_year || "",
+        type_of_ownership: snap.type_of_ownership || "",
+        engine_make: snap.engine_make || "",
+        horsepower: snap.horsepower || "",
+        no_fishers: snap.no_fishers || "",
+        registered_length: snap.registered_length || "",
+        registered_breadth: snap.registered_breadth || "",
+        registered_depth: snap.registered_depth || "",
+        tonnage_length: snap.tonnage_length || "",
+        tonnage_breadth: snap.tonnage_breadth || "",
+        tonnage_depth: snap.tonnage_depth || "",
+        gross_tonnage: snap.gross_tonnage || "",
+        net_tonnage: snap.net_tonnage || "",
+      }
       : {
-          boat_type: '',
-          material_used: '',
-          built_place: '',
-          built_year: '',
-          type_of_ownership: '',
-          engine_make: '',
-          horsepower: '',
-          no_fishers: '',
-          registered_length: '',
-          registered_breadth: '',
-          registered_depth: '',
-          tonnage_length: '',
-          tonnage_breadth: '',
-          tonnage_depth: '',
-          gross_tonnage: '',
-          net_tonnage: '',
-        };
+        boat_type: '',
+        material_used: '',
+        built_place: '',
+        built_year: '',
+        type_of_ownership: '',
+        engine_make: '',
+        horsepower: '',
+        no_fishers: '',
+        registered_length: '',
+        registered_breadth: '',
+        registered_depth: '',
+        tonnage_length: '',
+        tonnage_breadth: '',
+        tonnage_depth: '',
+        gross_tonnage: '',
+        net_tonnage: '',
+      };
 
     // Optionally reuse gear selections when reusing details
     const gearPart = reuseDetails
       ? Object.fromEntries(
-          Object.entries(snap).filter(([k]) => k.includes('_gear') || k.endsWith('_no'))
-        )
+        Object.entries(snap).filter(([k]) => k.includes('_gear') || k.endsWith('_no'))
+      )
       : {};
 
     // Compute MFBR prefix (keep municipality code) but blank number
@@ -849,14 +857,14 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         gross_tonnage: nextData.gross_tonnage,
         net_tonnage: nextData.net_tonnage,
       });
-    } catch (e) {}
+    } catch (e) { }
     setFormData(nextData);
     setPreview(null);
     setMfbrNumber('');
     setErrors({});
     // Go back to details step 1
     setCurrentStep(1);
-    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { }
   };
 
   const handleDoNotRegisterAnother = () => {
@@ -872,7 +880,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     const value = e.target.value.replace(/\D/g, ''); // Only allow digits
     const limitedValue = value.slice(0, 3); // Limit to 3 digits
     setMfbrNumber(limitedValue);
-    
+
     // Update formData with complete MFBR number
     if (mfbrMunicipality && limitedValue) {
       const code = municipalityCodes[mfbrMunicipality];
@@ -898,19 +906,19 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       if (isNaN(numValue)) numValue = "";
       else if (numValue < 0) numValue = 0;
       else if (numValue > 3) numValue = 3;
-      
+
       // Update form data with the new tonnage value
       const updatedFormData = {
         ...formData,
         [name]: numValue,
       };
       setFormData(updatedFormData);
-      
+
       // Auto-calculate tonnage if all three fields are filled
       const length = parseFloat(updatedFormData.tonnage_length) || 0;
       const breadth = parseFloat(updatedFormData.tonnage_breadth) || 0;
       const depth = parseFloat(updatedFormData.tonnage_depth) || 0;
-      
+
       if (length > 0 && breadth > 0 && depth > 0) {
         const gross = (depth * length * breadth * 0.7) / 2.83;
         const net = gross * 0.9;
@@ -996,7 +1004,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       }
       default: {
         // For select/text required quick checks used in validateStep
-        const requiredQuick = ['type_of_registration','application_date','type_of_ownership','no_fishers','homeport','boat_name','boat_type','material_used','built_place','built_year','engine_make','serial_number','horsepower'];
+        const requiredQuick = ['type_of_registration', 'application_date', 'type_of_ownership', 'no_fishers', 'homeport', 'boat_name', 'boat_type', 'material_used', 'built_place', 'built_year', 'engine_make', 'serial_number', 'horsepower'];
         if (requiredQuick.includes(name)) {
           if (!value || (typeof value === 'string' && value.trim() === '')) {
             newErrors[name] = 'This field is required.';
@@ -1018,7 +1026,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         >
           <div className="bg-white p-6 rounded-lg shadow">
             {/* <h2 className="text-xl font-semibold text-blue-800 mb-4 bg-blue-100 rounded px-4 py-3 shadow-sm"> */}
-                        <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2">
+            <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2">
               Search Fisherfolk
             </h2>
             <p className="text-sm text-blue-700 mb-2">
@@ -1067,15 +1075,13 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                           <tr
                             key={fisherfolk.registration_number}
                             onClick={() => handleFisherfolkSelect(fisherfolk)}
-                            className={`${
-                              isSelected ? "bg-blue-50 border-l-4 border-blue-600" : ""
-                            } hover:bg-gray-50 transition-all duration-150 cursor-pointer`}
+                            className={`${isSelected ? "bg-blue-50 border-l-4 border-blue-600" : ""
+                              } hover:bg-gray-50 transition-all duration-150 cursor-pointer`}
                           >
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="flex items-center justify-center">
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                  isSelected ? "border-blue-600 bg-blue-600" : "border-gray-300"
-                                }`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-blue-600 bg-blue-600" : "border-gray-300"
+                                  }`}>
                                   {isSelected && (
                                     <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
                                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -1088,11 +1094,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                               {fisherfolk.registration_number || "-"}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {`${fisherfolk.first_name} ${
-                                fisherfolk.middle_name
-                                  ? fisherfolk.middle_name.charAt(0) + ". "
-                                  : ""
-                              }${fisherfolk.last_name}`}
+                              {`${fisherfolk.first_name} ${fisherfolk.middle_name
+                                ? fisherfolk.middle_name.charAt(0) + ". "
+                                : ""
+                                }${fisherfolk.last_name}`}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                               {fisherfolk.address?.barangay || fisherfolk.barangay || "Not specified"}
@@ -1102,11 +1107,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <span
-                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                  fisherfolk.is_active
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-red-100 text-red-800"
-                                }`}
+                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${fisherfolk.is_active
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                                  }`}
                               >
                                 {fisherfolk.is_active ? "Active" : "Inactive"}
                               </span>
@@ -1365,11 +1369,11 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
-                    {isCheckingBoatName && <p className="mt-1 text-xs text-blue-600">Checking boat name...</p>}
-                    {boatNameError && <span className="mt-1 text-xs text-red-600 block">{boatNameError}</span>}
-                    {errors.boat_name && !boatNameError && (
-                      <span className="mt-1 text-xs text-red-600 block">{errors.boat_name}</span>
-                    )}
+                  {isCheckingBoatName && <p className="mt-1 text-xs text-blue-600">Checking boat name...</p>}
+                  {boatNameError && <span className="mt-1 text-xs text-red-600 block">{boatNameError}</span>}
+                  {errors.boat_name && !boatNameError && (
+                    <span className="mt-1 text-xs text-red-600 block">{errors.boat_name}</span>
+                  )}
                 </div>
               </div>
               <div>
@@ -1384,7 +1388,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="" hidden>Select Type</option>
+                    <option value="" hidden selected >Select Type</option>
                     <option value="Non-Motorized">Non-Motorized</option>
                     <option value="Motorized">Motorized</option>
                   </select>
@@ -1405,7 +1409,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="">Select Material</option>
+                    <option value="" hidden selected>Select Material</option>
                     <option value="Wood">Wood</option>
                     <option value="Fiber Glass">Fiber Glass</option>
                     <option value="Composite">Composite</option>
@@ -1448,9 +1452,9 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     max={new Date().getFullYear()}
                   />
                 </div>
-                  {errors.built_year && (
-                    <span className="mt-1 text-xs text-red-600 block">{errors.built_year}</span>
-                  )}
+                {errors.built_year && (
+                  <span className="mt-1 text-xs text-red-600 block">{errors.built_year}</span>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">
@@ -1464,7 +1468,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   >
-                    <option value="">Select Ownership</option>
+                    <option value="" selected hidden>Select Ownership</option>
                     <option value="Individual">Individual</option>
                     <option value="Group">Group</option>
                   </select>
@@ -1523,9 +1527,9 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
-                      {errors.serial_number && (
-                        <span className="mt-1 text-xs text-red-600 block">{errors.serial_number}</span>
-                      )}
+                  {errors.serial_number && (
+                    <span className="mt-1 text-xs text-red-600 block">{errors.serial_number}</span>
+                  )}
                 </div>
               </div>
               <div>
@@ -5674,33 +5678,39 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
             Certification
           </h2>
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <p className="text-sm text-gray-700 mb-4">
-            I certify that the information provided in this application is true and correct.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-500">Name of Applicant</label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  value={`${formData.owner_name || 'Automatic from fisherfolk name'}`}
-                  readOnly
-                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
-                />
+            <p className="text-sm text-gray-700 mb-4">
+              I certify that the information provided in this application is true and correct.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-500">Name of Applicant</label>
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    value={`${formData.owner_name || 'Automatic from fisherfolk name'}`}
+                    readOnly
+                    className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatic name from fisherfolk data
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-500">Date of Application</label>
+                <div className="relative mt-1">
+                  <input
+                    type="text"
+                    value={`${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`}
+                    readOnly
+                    className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatic date
+                </p>
               </div>
             </div>
-            <div>
-              <label className="block text-sm text-gray-500">Date of Application</label>
-              <div className="relative mt-1">
-                <input
-                  type="text"
-                  value={`${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`}
-                  readOnly
-                  className="relative w-full cursor-default rounded-lg bg-gray-100 py-3 pl-3 pr-10 text-left border border-gray-300 focus:outline-none text-gray-900 italic"
-                />
-              </div>
-            </div>
-          </div>
           </div>
 
           {/* Signatories */}
@@ -5719,10 +5729,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                   <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
                     {signatories.fisheryCoordinator
                       ? formatNameWithMiddleInitial(
-                          signatories.fisheryCoordinator.first_name,
-                          signatories.fisheryCoordinator.middle_name,
-                          signatories.fisheryCoordinator.last_name
-                        ).toUpperCase()
+                        signatories.fisheryCoordinator.first_name,
+                        signatories.fisheryCoordinator.middle_name,
+                        signatories.fisheryCoordinator.last_name
+                      ).toUpperCase()
                       : 'NOT ASSIGNED'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">Municipal Fishery Coordinator</p>
@@ -5732,10 +5742,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                   <p className="mt-1 text-base font-semibold text-gray-900 uppercase underline">
                     {signatories.notedBy
                       ? formatNameWithMiddleInitial(
-                          signatories.notedBy.first_name,
-                          signatories.notedBy.middle_name,
-                          signatories.notedBy.last_name
-                        ).toUpperCase()
+                        signatories.notedBy.first_name,
+                        signatories.notedBy.middle_name,
+                        signatories.notedBy.last_name
+                      ).toUpperCase()
                       : 'NOT ASSIGNED'}
                   </p>
                   <p className="text-xs text-gray-600 mt-1">{signatories.notedBy?.position === 'Provincial Agriculturist' ? 'Provincial Agriculturist' : 'Municipal Agriculturist'}</p>
@@ -5749,73 +5759,112 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     }
     if (currentStep === 2) {
       return (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow">
+        <div
+          className="space-y-6"
+          style={{ fontFamily: "Montserrat, sans-serif" }}
+        >
+          <div className="bg-white p-6 rounded-lg shadow mb-6">
             {/* Confirmation/summary step, grouped by section */}
-            <h4
-              className="text-xl font-medium mb-3 bg-blue-100 rounded px-3 py-2 border-b-2"
-              style={{ color: "#3863CF", borderBottomColor: "#3863CF" }}
-            >
-              Boat Information
-            </h4>
+            {/* Registration Details summary */}
+            <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2">
+              Registration Details
+            </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
               <div>
-                <strong>Application Date:</strong> {formData.application_date}
+                <span className="block text-sm text-gray-600">MFBR Number</span>
+                <p className="text-base font-semibold text-gray-900">{formData.mfbr_number}</p>
               </div>
               <div>
-                <strong>Type of Registration:</strong>{" "}
-                {formData.type_of_registration}
+                <span className="block text-sm text-gray-600">Type of Registration</span>
+                <p className="text-base font-semibold text-gray-900">{formData.type_of_registration}</p>
               </div>
               <div>
-                <strong>Fisherfolk Registration Number:</strong>{" "}
-                {formData.fisherfolk_registration_number}
+                <span className="block text-sm text-gray-600">Application Date</span>
+                <p className="text-base font-semibold text-gray-900">{formData.application_date}</p>
+              </div>
+
+            </div>
+
+            {/* Owner/Operator summary */}
+            <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+              Owner/Operator Information
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+              <span className="block text-sm text-gray-600">Fisherfolk Registration Number</span>
+              <p className="text-base font-semibold text-gray-900">{formData.fisherfolk_registration_number}</p>
+            </div>
+              <div>
+                <span className="block text-sm text-gray-600">Owner Name</span>
+                <p className="text-base font-semibold text-gray-900">{formData.owner_name}</p>
+              </div>
+
+              <div>
+                <span className="block text-sm text-gray-600">Owner Address</span>
+                <p className="text-base font-semibold text-gray-900">{formData.owner_address}</p>
               </div>
               <div>
-                <strong>Owner Name:</strong> {formData.owner_name}
+                <span className="block text-sm text-gray-600">Fishing Ground</span>
+                <p className="text-base font-semibold text-gray-900">{formData.fishing_ground}</p>
               </div>
               <div>
-                <strong>Owner Address:</strong> {formData.owner_address}
+                <span className="block text-sm text-gray-600">FMA Number</span>
+                <p className="text-base font-semibold text-gray-900">{formData.fma_number}</p>
               </div>
               <div>
-                <strong>Type of Ownership:</strong> {formData.type_of_ownership}
-              </div>
-              <div>
-                <strong>Boat Name:</strong> {formData.boat_name}
-              </div>
-              <div>
-                <strong>Boat Type:</strong> {formData.boat_type}
-              </div>
-              <div>
-                <strong>Fishing Ground:</strong> {formData.fishing_ground}
-              </div>
-              <div>
-                <strong>FMA Number:</strong> {formData.fma_number}
-              </div>
-              <div>
-                <strong>Built Place:</strong> {formData.built_place}
-              </div>
-              <div>
-                <strong>No. of Fishers:</strong> {formData.no_fishers}
-              </div>
-              <div>
-                <strong>Material Used:</strong> {formData.material_used}
-              </div>
-              <div>
-                <strong>Homeport:</strong> {formData.homeport}
-              </div>
-              <div>
-                <strong>Built Year:</strong> {formData.built_year}
-              </div>
-              <div>
-                <strong>Engine Make:</strong> {formData.engine_make}
-              </div>
-              <div>
-                <strong>Serial Number:</strong> {formData.serial_number}
-              </div>
-              <div>
-                <strong>Horsepower:</strong> {formData.horsepower}
+                <span className="block text-sm text-gray-600">Homeport</span>
+                <p className="text-base font-semibold text-gray-900">{formData.homeport}</p>
               </div>
             </div>
+
+            {/* Boat Information summary */}
+            <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+              Boat Information
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <span className="block text-sm text-gray-600">Boat Name</span>
+                <p className="text-base font-semibold text-gray-900">{formData.boat_name}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Boat Type</span>
+                <p className="text-base font-semibold text-gray-900">{formData.boat_type}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Material Used</span>
+                <p className="text-base font-semibold text-gray-900">{formData.material_used}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Built Place</span>
+                <p className="text-base font-semibold text-gray-900">{formData.built_place}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Year Built</span>
+                <p className="text-base font-semibold text-gray-900">{formData.built_year}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Type of Ownership</span>
+                <p className="text-base font-semibold text-gray-900">{formData.type_of_ownership}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Engine Make</span>
+                <p className="text-base font-semibold text-gray-900">{formData.engine_make}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Serial Number</span>
+                <p className="text-base font-semibold text-gray-900">{formData.serial_number}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">Horsepower</span>
+                <p className="text-base font-semibold text-gray-900">{formData.horsepower}</p>
+              </div>
+              <div>
+                <span className="block text-sm text-gray-600">No. of Fishers</span>
+                <p className="text-base font-semibold text-gray-900">{formData.no_fishers}</p>
+              </div>
+            </div>
+
             <h4
               className="text-xl font-medium mb-3 bg-blue-100 rounded px-3 py-2 border-b-2 mt-6"
               style={{ color: "#3863CF", borderBottomColor: "#3863CF" }}
@@ -5892,12 +5941,12 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                         .map((specKey) =>
                           formData[specKey + "_no"] && formData[specKey]
                             ? {
-                                name: specKey
-                                  .replace(field + "_", "")
-                                  .replace(/_/g, " ")
-                                  .replace(/\b\w/g, (c) => c.toUpperCase()),
-                                qty: formData[specKey + "_no"],
-                              }
+                              name: specKey
+                                .replace(field + "_", "")
+                                .replace(/_/g, " ")
+                                .replace(/\b\w/g, (c) => c.toUpperCase()),
+                              qty: formData[specKey + "_no"],
+                            }
                             : null
                         )
                         .filter(Boolean);
@@ -5960,12 +6009,12 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                         .map((specKey) =>
                           formData[specKey + "_no"] && formData[specKey]
                             ? {
-                                name: specKey
-                                  .replace(field + "_", "")
-                                  .replace(/_/g, " ")
-                                  .replace(/\b\w/g, (c) => c.toUpperCase()),
-                                qty: formData[specKey + "_no"],
-                              }
+                              name: specKey
+                                .replace(field + "_", "")
+                                .replace(/_/g, " ")
+                                .replace(/\b\w/g, (c) => c.toUpperCase()),
+                              qty: formData[specKey + "_no"],
+                            }
                             : null
                         )
                         .filter(Boolean);
@@ -6004,26 +6053,26 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
             </div>
 
             {/* Certification Section */}
-          <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
-            Certification
-          </h2>
-              <p className="text-gray-700 mb-4 italic">
-                "I hereby certify that all information contained herein is true and correct."
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <span className="block text-sm text-gray-600 mb-1">Name of Applicant</span>
-                  <p className="text-base font-semibold text-gray-900">
-                    {formData.owner_name || 'Not specified'}
-                  </p>
-                </div>
-                <div>
-                  <span className="block text-sm text-gray-600 mb-1">Date of Application</span>
-                  <p className="text-base font-semibold text-gray-900">
-                    {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
-                </div>
+            <h2 className="text-xl font-medium text-blue-800 mb-3 bg-blue-100 rounded px-3 py-2 mt-6">
+              Certification
+            </h2>
+            <p className="text-gray-700 mb-4 italic">
+              "I hereby certify that all information contained herein is true and correct."
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <span className="block text-sm text-gray-600 mb-1">Name of Applicant</span>
+                <p className="text-base font-semibold text-gray-900">
+                  {formData.owner_name || 'Not specified'}
+                </p>
               </div>
+              <div>
+                <span className="block text-sm text-gray-600 mb-1">Date of Application</span>
+                <p className="text-base font-semibold text-gray-900">
+                  {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
 
 
             {/* Signatories Section */}
@@ -6109,7 +6158,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
           </button>
         </div>
       </div>
-      
+
       {/* Alert Modal */}
       <AlertModal
         isOpen={alertModal.isOpen}

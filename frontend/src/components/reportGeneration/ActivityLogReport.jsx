@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import PageTitle from "../PageTitle";
+import { FaSearch } from "react-icons/fa";
 import { getActivities } from "../../utils/activityLog";
 import { useAuth } from '../../contexts/AuthContext';
 import provincialAgriculturistService from '../../services/provincialAgriculturistService';
 import logo from '../../assets/logo.png';
+import Loader from "../Loader";
 
 const styles = {
   container: {
@@ -106,6 +108,7 @@ const ActivityLogReport = () => {
   const [pageSize, setPageSize] = useState(25);
   const pageOptions = [25, 52, 100];
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const fetchActivityLogs = async () => {
     setLoading(true);
@@ -141,6 +144,42 @@ const ActivityLogReport = () => {
     return () => { mounted = false; };
   }, []);
 
+  const PaginationControls = ({ page, setPage, pageSize, total }) => {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const pages = [];
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+
+    return (
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          disabled={page <= 1}
+          className="px-2 py-1 border rounded disabled:opacity-50"
+        >
+          Prev
+        </button>
+        <div className="hidden sm:flex items-center gap-1">
+          {pages.slice(0, 10).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={`px-2 py-1 rounded ${p === page ? 'bg-blue-600 text-white' : 'border'}`}
+            >
+              {p}
+            </button>
+          ))}
+          {totalPages > 10 && <span className="px-2">...</span>}
+        </div>
+        <button
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          disabled={page >= totalPages}
+          className="px-2 py-1 border rounded disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    );
+  };
   const handleDownloadPDF = () => {
     setShowNotification(true);
 
@@ -170,129 +209,129 @@ const ActivityLogReport = () => {
       );
 
       const columns = [
-      { header: "Date", dataKey: "date" },
-      { header: "User", dataKey: "user" },
-      { header: "Action", dataKey: "action" },
-      { header: "Description", dataKey: "description" },
-    ];
+        { header: "Date", dataKey: "date" },
+        { header: "User", dataKey: "user" },
+        { header: "Action", dataKey: "action" },
+        { header: "Description", dataKey: "description" },
+      ];
 
-    const rows = activityLogs.map((log) => ({
-      date: formatDateTime(log.timestamp),
-      user: log.user || "-",
-      action: log.action || "-",
-      description: log.description || "-",
-    }));
+      const rows = activityLogs.map((log) => ({
+        date: formatDateTime(log.timestamp),
+        user: log.user || "-",
+        action: log.action || "-",
+        description: log.description || "-",
+      }));
 
-    const tableStartY = dateY + 20;
-    autoTable(doc, {
-    startY: tableStartY,
-          head: [columns.map((col) => col.header)],
-          body: rows.map((row) => columns.map((col) => row[col.dataKey])),
-          styles: { font: "helvetica", fontSize: 10, cellPadding: 4 },
-          headStyles: { fillColor: [37, 99, 235], textColor: 255 },
-          alternateRowStyles: { fillColor: [241, 245, 249] },
-          margin: { left: margin, right: margin },
-          theme: "striped",
-          didDrawPage: (data) => {
-            // Only show header on the first page; footer shown on every page
-            const pageNumber = doc.internal.getCurrentPageInfo ? doc.internal.getCurrentPageInfo().pageNumber : doc.internal.getNumberOfPages();
-            if (pageNumber === 1) {
-              try {
-                doc.addImage(logoImg, "PNG", margin, 20, logoWidth, logoHeight);
-              } catch (e) {}
-              doc.setFontSize(16);
-              doc.setFont("helvetica", "bold");
-              doc.text(
-                "Office of the Provincial Agriculturist - Fisheries Section",
-                margin + logoWidth + 20,
-                40,
-                { maxWidth: doc.internal.pageSize.getWidth() - margin - logoWidth - 20 }
-              );
-              doc.setFontSize(10);
-              doc.setFont("helvetica", "normal");
-              const contactText =
-                "Provincial Agriculturist Office, Aguila Road, Brgy. II\nCity of San Fernando, La Union 2500\nPhone: (072) 888-3184 / 607-4492 / 607-4488\nEmail: opaglaunion@yahoo.com";
-              doc.text(contactText, margin + logoWidth + 20, 60, { maxWidth: 400 });
-              doc.setLineWidth(1);
-              doc.line(margin, headerHeight, doc.internal.pageSize.getWidth() - margin, headerHeight);
-            }
-
-            // Footer (draw on every page)
-            doc.setFontSize(10);
+      const tableStartY = dateY + 20;
+      autoTable(doc, {
+        startY: tableStartY,
+        head: [columns.map((col) => col.header)],
+        body: rows.map((row) => columns.map((col) => row[col.dataKey])),
+        styles: { font: "helvetica", fontSize: 10, cellPadding: 4 },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+        alternateRowStyles: { fillColor: [241, 245, 249] },
+        margin: { left: margin, right: margin },
+        theme: "striped",
+        didDrawPage: (data) => {
+          // Only show header on the first page; footer shown on every page
+          const pageNumber = doc.internal.getCurrentPageInfo ? doc.internal.getCurrentPageInfo().pageNumber : doc.internal.getNumberOfPages();
+          if (pageNumber === 1) {
+            try {
+              doc.addImage(logoImg, "PNG", margin, 20, logoWidth, logoHeight);
+            } catch (e) { }
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
             doc.text(
-              `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`,
-              data.settings.margin.left,
-              doc.internal.pageSize.getHeight() - 20
+              "Office of the Provincial Agriculturist - Fisheries Section",
+              margin + logoWidth + 20,
+              40,
+              { maxWidth: doc.internal.pageSize.getWidth() - margin - logoWidth - 20 }
             );
-          },
-        });
-
-    const fileName =
-      startDate && endDate ? `ActivityLog_Report_${startDate}_to_${endDate}.pdf` : "ActivityLog_Report.pdf";
-
-    // add signature block on last page (bottom-right above footer)
-    try {
-      const preparedByName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '—';
-      const notedLabel = notedBy
-        ? `${notedBy.first_name || ''} ${notedBy.last_name || ''}`.trim() + ` — ${notedBy.position || 'Agricultural Center Chief II'}`
-        : `Provincial Agriculturist — Agricultural Center Chief II`;
-
-      const lastPage = doc.internal.getNumberOfPages();
-      doc.setPage(lastPage);
-      const pw = doc.internal.pageSize.getWidth();
-      const ph = doc.internal.pageSize.getHeight();
-      const margin = 40;
-      const xRight = pw - margin;
-      let yPos = ph - 60;
-      doc.setFontSize(10);
-      doc.text(`Prepared by: ${preparedByName}`, xRight, yPos, { align: 'right' });
-      yPos += 14;
-      doc.text(`Noted by: ${notedLabel}`, xRight, yPos, { align: 'right' });
-      yPos += 14;
-      doc.text(`Date generated: ${new Date().toLocaleDateString()}`, xRight, yPos, { align: 'right' });
-
-      // helper: save+preview PDF with File System Access API fallback
-      const saveAndPreviewPdf = async (pdfDoc, fileName) => {
-        const blob = pdfDoc.output('blob');
-        if (window.showSaveFilePicker) {
-          try {
-            const opts = { suggestedName: fileName, types: [{ description: 'PDF file', accept: { 'application/pdf': ['.pdf'] } }] };
-            const handle = await window.showSaveFilePicker(opts);
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            const url = URL.createObjectURL(blob);
-            const w = window.open(url);
-            if (w) w.onload = () => w.print();
-            return true;
-          } catch (e) {
-            return false;
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            const contactText =
+              "Provincial Agriculturist Office, Aguila Road, Brgy. II\nCity of San Fernando, La Union 2500\nPhone: (072) 888-3184 / 607-4492 / 607-4488\nEmail: opaglaunion@yahoo.com";
+            doc.text(contactText, margin + logoWidth + 20, 60, { maxWidth: 400 });
+            doc.setLineWidth(1);
+            doc.line(margin, headerHeight, doc.internal.pageSize.getWidth() - margin, headerHeight);
           }
-        }
-        if (!window.confirm('Choose OK to download the PDF and open print preview, or Cancel to abort.')) return false;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        const w = window.open(url);
-        if (w) w.onload = () => w.print();
-        return true;
-      };
 
-      (async () => {
-        const ok = await saveAndPreviewPdf(doc, fileName);
-        if (!ok) {
-          setShowNotification(false);
-          return;
-        }
+          // Footer (draw on every page)
+          doc.setFontSize(10);
+          doc.text(
+            `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`,
+            data.settings.margin.left,
+            doc.internal.pageSize.getHeight() - 20
+          );
+        },
+      });
+
+      const fileName =
+        startDate && endDate ? `ActivityLog_Report_${startDate}_to_${endDate}.pdf` : "ActivityLog_Report.pdf";
+
+      // add signature block on last page (bottom-right above footer)
+      try {
+        const preparedByName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '—';
+        const notedLabel = notedBy
+          ? `${notedBy.first_name || ''} ${notedBy.last_name || ''}`.trim() + ` — ${notedBy.position || 'Agricultural Center Chief II'}`
+          : `Provincial Agriculturist — Agricultural Center Chief II`;
+
+        const lastPage = doc.internal.getNumberOfPages();
+        doc.setPage(lastPage);
+        const pw = doc.internal.pageSize.getWidth();
+        const ph = doc.internal.pageSize.getHeight();
+        const margin = 40;
+        const xRight = pw - margin;
+        let yPos = ph - 60;
+        doc.setFontSize(10);
+        doc.text(`Prepared by: ${preparedByName}`, xRight, yPos, { align: 'right' });
+        yPos += 14;
+        doc.text(`Noted by: ${notedLabel}`, xRight, yPos, { align: 'right' });
+        yPos += 14;
+        doc.text(`Date generated: ${new Date().toLocaleDateString()}`, xRight, yPos, { align: 'right' });
+
+        // helper: save+preview PDF with File System Access API fallback
+        const saveAndPreviewPdf = async (pdfDoc, fileName) => {
+          const blob = pdfDoc.output('blob');
+          if (window.showSaveFilePicker) {
+            try {
+              const opts = { suggestedName: fileName, types: [{ description: 'PDF file', accept: { 'application/pdf': ['.pdf'] } }] };
+              const handle = await window.showSaveFilePicker(opts);
+              const writable = await handle.createWritable();
+              await writable.write(blob);
+              await writable.close();
+              const url = URL.createObjectURL(blob);
+              const w = window.open(url);
+              if (w) w.onload = () => w.print();
+              return true;
+            } catch (e) {
+              return false;
+            }
+          }
+          if (!window.confirm('Choose OK to download the PDF and open print preview, or Cancel to abort.')) return false;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          const w = window.open(url);
+          if (w) w.onload = () => w.print();
+          return true;
+        };
+
+        (async () => {
+          const ok = await saveAndPreviewPdf(doc, fileName);
+          if (!ok) {
+            setShowNotification(false);
+            return;
+          }
+          setTimeout(() => setShowNotification(false), 2000);
+        })();
+      } catch (err) {
         setTimeout(() => setShowNotification(false), 2000);
-      })();
-    } catch (err) {
-      setTimeout(() => setShowNotification(false), 2000);
-    }
+      }
     };
   };
 
@@ -318,124 +357,183 @@ const ActivityLogReport = () => {
   const thSticky = { ...styles.th, position: 'sticky', top: 0, zIndex: 10, backgroundColor: styles.th.backgroundColor || '#f1f5f9' };
 
   return (
-    <>
-      <div className="px-6 pt-6" style={{ fontFamily: 'Montserrat, sans-serif' }}>
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <button
-            onClick={() => navigate('/admin/utility')}
-            className="p-2 rounded-full hover:bg-gray-200 transition-colors"
-            aria-label="Back to utility"
-          >
-            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+    <div
+      className="h-full bg-gray-50"
+      style={{ fontFamily: "Montserrat, sans-serif" }}
+    >
+      <div className="h-full px-4 py-6">
+        <div className="flex items-center gap-4">
+          {/* back button */}
+          <button type="button" onClick={() => navigate('/admin/utility')} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg transition-all duration-200">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <div>
-            <PageTitle value="ACTIVITY LOGS" />
-            <p className="text-sm text-gray-600">View the activities done by users</p>
+
+          {/* title */}
+          <div className="grid grid-cols-1 grid-rows-2 mt-4">
+            <h1 className="text-3xl font-bold text-gray-900" style={{ fontFamily: 'Montserrat, sans-serif' }}>BOUNDARY EDITOR</h1>
+            <p className="text-base text-gray-700" style={{ fontFamily: 'Montserrat, sans-serif' }}>
+              Manage the boundaries per municipalities of La Union
+            </p>
+          </div>
+        </div>
+        <div className="mb-8 ">
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <div className="relative max-w-2xl">
+              <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="User or Action"
+                className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="pl-10 pr-10" style={{ backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      <div style={styles.flexRow}>
-        <div className="justify-right">
-          <label style={styles.label}>Start Date:</label>
-          <input
-            type="date"
-            style={styles.input}
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            onFocus={(e) => (e.target.style.borderColor = styles.inputFocus.borderColor)}
-            onBlur={(e) => (e.target.style.borderColor = styles.input.borderColor)}
-          />
-        </div>
-        <div>
-          <label style={styles.label}>End Date:</label>
-          <input
-            type="date"
-            style={styles.input}
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            onFocus={(e) => (e.target.style.borderColor = styles.inputFocus.borderColor)}
-            onBlur={(e) => (e.target.style.borderColor = styles.input.borderColor)}
-          />
-        </div>
-      </div>
 
-      {error && <div style={styles.errorBox}>{error}</div>}
 
-      {loading ? (
-        <p style={styles.loadingText}>Loading activity log data...</p>
-      ) : (
-        <>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 14, color: '#334155' }}>Rows per page:</label>
-                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }} style={{ padding: '6px 8px' }}>
-                  {pageOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                <div style={{ fontSize: 13, color: '#64748b' }}>Total: {searchedLogs.length}</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
-                  <label style={{ fontSize: 14, color: '#334155' }}>Search:</label>
-                  <input
-                    type="text"
-                    placeholder="User or Action"
-                    style={{ ...styles.input, padding: '6px 8px' }}
-                    value={searchQuery}
-                    onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-                  />
+
+        <div className="bg-white rounded-lg shadow w-full font-montserrat p-4">
+          {error && (
+            <div className="mb-4 p-4 text-red-700 bg-red-100 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <Loader />
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 mb-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-gray-700">Rows per page:</label>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm"
+                    >
+                      {pageOptions.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-sm text-gray-600">Total: {filteredActivityLogs.length}</div>
+                    <label className="ml-4 text-sm text-gray-700">Status:</label>
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-blue-500 border-1 border-b-2 rounded px-2 py-1 text-sm">
+                      <option value="all">All</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setPage((p) => Math.max(1, p - 1))
+                    }
+                    disabled={currentPageUI <= 1}
+                    className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50 text-sm"
+                  >
+                    Prev
+                  </button>
+                  <div className="text-sm text-gray-700">
+                    {currentPageUI} / {totalPagesUI}
+                  </div>
+                  <button
+                    onClick={() =>
+                      setPage((p) =>
+                        Math.min(totalPagesUI, p + 1)
+                      )
+                    }
+                    disabled={currentPageUI >= totalPagesUI}
+                    className="px-2 py-1 border border-blue-500 border-1 border-b-2 rounded disabled:opacity-50 text-sm"
+                  >
+                    Next
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPageUI <= 1} style={{ padding: '6px 10px' }}>Prev</button>
-                <div style={{ minWidth: 60, textAlign: 'center' }}>{currentPageUI} / {totalPagesUI}</div>
-                <button onClick={() => setPage((p) => Math.min(totalPagesUI, p + 1))} disabled={currentPageUI >= totalPagesUI} style={{ padding: '6px 10px' }}>Next</button>
-              </div>
-            </div>
 
-            <div style={{ overflowY: 'auto', maxHeight: '60vh', borderRadius: 6 }}>
-              <table style={styles.table}>
-                <thead>
-                  <tr>
-                    <th style={thSticky}>Date</th>
-                    <th style={thSticky}>User</th>
-                    <th style={thSticky}>Action</th>
-                    <th style={thSticky}>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} style={{ ...styles.td, ...styles.noDataRow }}>
-                        No data available for selected date range.
-                      </td>
+              <div className="overflow-y-auto max-h-[60vh] rounded-b">
+                <table className="w-full divide-y divide-gray-200">
+                  <thead className="sticky top-0 z-10">
+                    <tr
+                      style={{
+                        backgroundColor: "#3863CF",
+                        fontFamily: "Montserrat, sans-serif",
+                      }}
+                    >
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        User
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Action
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                        Description
+                      </th>
                     </tr>
-                  ) : (
-                    paginatedLogs.map((log, idx) => (
-                      <tr key={startIdxUI + idx}>
-                        <td style={styles.td}>{formatDateTime(log.timestamp)}</td>
-                        <td style={styles.td}>{log.user || "-"}</td>
-                        <td style={styles.td}>{log.action || "-"}</td>
-                        <td style={styles.td}>{log.description || "-"}</td>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {paginatedLogs.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          className="px-6 py-4 text-center text-gray-500"
+                        >
+                          No data available for selected filters.
+                        </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-        </>
-      )}
+                    ) : (
+                      paginatedLogs.map((log, idx) => {
+                        const rowIndex = startIdxUI + idx;
+                        return (
+                          <tr
+                            key={rowIndex}
+                            className={
+                              rowIndex % 2 === 0
+                                ? "bg-white"
+                                : "bg-gray-50"
+                            }
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatDateTime(log.timestamp)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {log.user || "-"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {log.action || "-"}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {log.description || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-      </div>
-
-      
-    </>
+    </div>
   );
 };
 
