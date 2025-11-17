@@ -982,13 +982,16 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
       const timestamp = feature?.properties?.timestamp || '';
       const ts = Date.parse(timestamp);
       const age = Number.isFinite(ts) ? Math.floor((Date.now() - ts) / 1000) : null;
-      const status = age != null && age > OFFLINE_THRESHOLD_SECONDS ? 'offline' : 'online';
       
-      // Debug logging removed to reduce console clutter
+      // CRITICAL FIX: Use backend's status if provided (from TrackerStatusEvent)
+      // Only fallback to age-based calculation if backend doesn't provide status
+      const backendStatus = feature?.properties?.status;
+      const computedStatus = age != null && age > OFFLINE_THRESHOLD_SECONDS ? 'offline' : 'online';
+      const finalStatus = backendStatus || computedStatus;
       
       return {
         ...feature,
-        properties: { ...feature.properties, status, age_seconds: age },
+        properties: { ...feature.properties, status: finalStatus, age_seconds: age },
       };
     };
 
@@ -1079,11 +1082,13 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
           const timestamp = feature?.properties?.timestamp || '';
           const ts = Date.parse(timestamp);
           const age = Number.isFinite(ts) ? Math.floor((Date.now() - ts) / 1000) : null;
-          const status = age != null && age > OFFLINE_THRESHOLD_SECONDS ? 'offline' : 'online';
           
-          // Debug logging removed to reduce console clutter
+          // CRITICAL FIX: Use backend's status if provided (from TrackerStatusEvent)
+          const backendStatus = feature?.properties?.status;
+          const computedStatus = age != null && age > OFFLINE_THRESHOLD_SECONDS ? 'offline' : 'online';
+          const finalStatus = backendStatus || computedStatus;
           
-          return { ...feature, properties: { ...feature.properties, status, age_seconds: age } };
+          return { ...feature, properties: { ...feature.properties, status: finalStatus, age_seconds: age } };
         };
 
         setSmoothFeatures((prev) => {

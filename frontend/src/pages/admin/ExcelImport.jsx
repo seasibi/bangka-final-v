@@ -169,29 +169,73 @@ const ExcelImport = () => {
           </form>
 
           {result && (
-            <div className="mt-6 p-4 rounded-lg border" style={{
-              backgroundColor: result.error ? '#FEE2E2' : '#D1FAE5',
-              borderColor: result.error ? '#F87171' : '#34D399'
-            }}>
-              {result.error ? (
-                <div className="text-red-700 font-medium">❌ Error: {result.error}</div>
-              ) : (
-                <div>
-                  <div className="text-green-700 font-medium mb-2">
-                    ✓ Successfully imported {result.imported} {importType === "boat" ? "boat" : "fisherfolk"} records
-                  </div>
-                  {result.errors && result.errors.length > 0 && (
-                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                      <div className="font-semibold text-yellow-800 mb-2">⚠️ Some rows had errors:</div>
-                      <ul className="list-disc ml-6 text-sm text-yellow-700 space-y-1">
-                        {result.errors.map((err, i) => (
-                          <li key={i}>
-                            Row {err.row}: {JSON.stringify(err.errors)}
-                          </li>
-                        ))}
-                      </ul>
+            <div className="mt-6 space-y-4">
+              {/* Main Status */}
+              <div className="p-4 rounded-lg border" style={{
+                backgroundColor: result.error ? '#FEE2E2' : '#D1FAE5',
+                borderColor: result.error ? '#F87171' : '#34D399'
+              }}>
+                {result.error ? (
+                  <div className="text-red-700 font-medium">❌ Error: {result.error}</div>
+                ) : (
+                  <div>
+                    <div className="text-green-700 font-bold text-lg mb-2">
+                      ✓ Import Complete
                     </div>
-                  )}
+                    <div className="text-gray-700 space-y-1">
+                      <div>✅ <strong>{result.imported || 0}</strong> {importType === "boat" ? "boat" : "fisherfolk"} records imported successfully</div>
+                      {result.skipped > 0 && (
+                        <div>⚠️ <strong>{result.skipped}</strong> rows skipped due to errors</div>
+                      )}
+                      <div className="text-sm text-gray-600">Total rows processed: {result.total_rows || 0}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Warnings */}
+              {result.warnings && result.warnings.length > 0 && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="font-semibold text-blue-800 mb-2">ℹ️ Import Warnings</div>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    {result.warnings.map((warn, i) => (
+                      <li key={i}>{warn.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Errors */}
+              {result.errors && result.errors.length > 0 && (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="font-semibold text-yellow-800 mb-2">
+                    ⚠️ Rows with Errors ({result.errors.length})
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    <ul className="text-sm text-yellow-700 space-y-2">
+                      {result.errors.slice(0, 20).map((err, i) => (
+                        <li key={i} className="border-b border-yellow-100 pb-2">
+                          <strong>Row {err.row}:</strong>
+                          <div className="ml-4 mt-1">
+                            {typeof err.errors === 'object' ? (
+                              Object.entries(err.errors).map(([field, msg]) => (
+                                <div key={field} className="text-xs">
+                                  • <span className="font-medium">{field}:</span> {Array.isArray(msg) ? msg.join(', ') : msg}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-xs">{JSON.stringify(err.errors)}</div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                      {result.errors.length > 20 && (
+                        <li className="text-xs text-gray-600 italic">
+                          ... and {result.errors.length - 20} more errors
+                        </li>
+                      )}
+                    </ul>
+                  </div>
                 </div>
               )}
             </div>

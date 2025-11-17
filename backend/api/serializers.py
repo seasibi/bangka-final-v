@@ -675,13 +675,13 @@ class FisherfolkSerializer(serializers.ModelSerializer):
                         org_data_list.append({})
                     org_data_list[index][field] = value
 
-        # Set created_by: prefer explicit value from caller (e.g., import view),
-        # otherwise fall back to authenticated request.user if available.
+        # Set created_by
         if "created_by" not in validated_data:
-            if request and hasattr(request, "user") and getattr(request.user, "is_authenticated", False):
+            if request and hasattr(request, "user") and request.user.is_authenticated:
                 validated_data["created_by"] = request.user
-            # If neither provided nor authenticated, leave unset; model allows null
-            
+            else:
+                raise serializers.ValidationError("A valid user is required to create a Fisherfolk record.")
+
         # Remove any accidental read-only payload we might have added earlier
         validated_data.pop("organizations", None)
 
@@ -1109,35 +1109,6 @@ class BarangayVerifierSerializer(serializers.ModelSerializer):
         fields = ['id', 'municipality', 'municipality_id', 'municipality_name', 'barangay', 'barangay_id', 'barangay_name', 
                   'position', 'first_name', 'middle_name', 'last_name', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def validate(self, attrs):
-        """Enforce only ONE active verifier per barangay+position.
-
-        Inactive verifiers are allowed for logging/history, but if is_active is
-        true we must ensure no other active verifier exists for the same
-        barangay and position.
-        """
-        instance = getattr(self, 'instance', None)
-
-        municipality = attrs.get('municipality') or getattr(instance, 'municipality', None)
-        barangay = attrs.get('barangay') or getattr(instance, 'barangay', None)
-        position = attrs.get('position') or getattr(instance, 'position', None)
-
-        # Determine resulting active flag after this save
-        is_active = attrs.get('is_active')
-        if is_active is None and instance is not None:
-            is_active = instance.is_active
-
-        if barangay and position and is_active:
-            qs = BarangayVerifier.objects.filter(barangay=barangay, position=position, is_active=True)
-            if instance is not None:
-                qs = qs.exclude(pk=instance.pk)
-            if qs.exists():
-                raise serializers.ValidationError({
-                    'position': 'This position is already assigned to an active verifier for this barangay.'
-                })
-
-        return attrs
 
 
 # Signatory Serializer

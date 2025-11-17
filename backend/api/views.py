@@ -27,7 +27,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .permissions import IsAdmin, IsSelfOrAdmin, IsAdminOrAgriReadOnly
 import pandas as pd
 from rest_framework.parsers import MultiPartParser, FormParser
-from io import BytesIO
 
 # TOKEN
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -508,15 +507,24 @@ def deactivate_current_admin(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
+    """Regular password change for already logged-in users."""
     user = request.user
     current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
 
+    if not current_password or not new_password:
+        return Response({'error': 'Current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
     if not user.check_password(current_password):
         return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if len(str(new_password)) < 8:
+        return Response({'error': 'Password must be at least 8 characters long'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user.check_password(new_password):
+        return Response({'error': 'New password cannot be the same as the current password'}, status=status.HTTP_400_BAD_REQUEST)
+
     user.set_password(new_password)
-    user.must_change_password = False  # Clear the flag after password change
     user.save()
     
     # Log password change
@@ -530,31 +538,65 @@ def change_password(request):
     except Exception as e:
         print(f"Failed to log password change: {e}")
 
-    return Response({'success': 'Password updated successfully'}, status=status.HTTP_200_OK)
+    return Response({'success': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_new_password(request):
-    """Allow users with must_change_password=True to set a new password without providing current password"""
+    """Set new password for first-time login (requires temporary password)."""
     user = request.user
+    current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
-    
-    # Only allow this for users who must change their password
+
+    print(f"\n=== SET NEW PASSWORD DEBUG ===")
+    print(f"User: {user.email}")
+    print(f"Must change password: {user.must_change_password}")
+    print(f"Current password provided: {'Yes' if current_password else 'No'} (length: {len(current_password) if current_password else 0})")
+    print(f"New password provided: {'Yes' if new_password else 'No'} (length: {len(new_password) if new_password else 0})")
+    print(f"Stored password hash starts with: {user.password[:20] if user.password else 'None'}...")
+    print(f"Password is hashed: {user.password.startswith('pbkdf2_sha256$') if user.password else False}")
+
+    # Only allow this for users who must change their password on first login
     if not user.must_change_password:
+        print("❌ Error: User does not have must_change_password flag set")
         return Response({'error': 'This endpoint is only for required password changes'}, status=status.HTTP_403_FORBIDDEN)
+
+    if not current_password or not new_password:
+        print("❌ Error: Missing current or new password")
+        return Response({'error': 'Current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check if current password is correct
+    print(f"About to verify password...")
+    print(f"  - Entered password length: {len(current_password)}")
+    print(f"  - Entered password first 2 chars: {current_password[:2] if len(current_password) >= 2 else current_password}")
+    print(f"  - Entered password last 2 chars: {current_password[-2:] if len(current_password) >= 2 else current_password}")
     
-    if not new_password:
-        return Response({'error': 'New password is required'}, status=status.HTTP_400_BAD_REQUEST)
+    password_check = user.check_password(current_password)
+    print(f"Password verification result: {password_check}")
     
-    if len(new_password) < 6:
+    if not password_check:
+        print("❌ Error: Current password is incorrect")
+        print("   Please check the temporary password sent to your email")
+        return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    print("✅ Current password verified successfully")
+
+    if len(str(new_password)) < 6:
+        print("❌ Error: Password too short")
         return Response({'error': 'Password must be at least 6 characters long'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    if user.check_password(new_password):
+        print("❌ Error: New password same as current")
+        return Response({'error': 'New password cannot be the same as the current password'}, status=status.HTTP_400_BAD_REQUEST)
+
+    print("✅ All validations passed, updating password...")
     user.set_password(new_password)
-    user.must_change_password = False  # Clear the flag after password change
+    user.must_change_password = False
     user.save()
-    
-    # Log password change
+    print("✅ Password updated successfully")
+
+    # Log password change for first-login flow
     try:
         from .models import ActivityLog
         ActivityLog.objects.create(
@@ -634,12 +676,22 @@ def update_user(request, pk):
             return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid data.', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
 def check_email(request):
-    raw = request.GET.get('email', '')
-    target = _canonical_email(raw)
+    """Check if an email is already in use."""
+    if request.method == 'POST':
+        email = request.data.get('email')
+    else:
+        email = request.GET.get('email', '')
+    
+    if not email:
+        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    target = _canonical_email(email)
     # Compare using canonical form across all users (active or not)
     exists = any(_canonical_email(u.email) == target for u in User.objects.all())
-    return JsonResponse({'available': not exists})
+    return Response({'exists': exists, 'available': not exists}, status=status.HTTP_200_OK)
 
 # BOATS Registry
 class BoatViewSet(viewsets.ModelViewSet):
@@ -1772,7 +1824,7 @@ def gps_geojson(request):
     logger.info(f"[GPS_GEOJSON] Found {gps_data.count()} GPS records")
     
     # Get active violations
-    from .models import BoundaryViolationNotification
+    from .models import BoundaryViolationNotification, Municipality, TrackerStatusEvent
     active_violations = set()
     violations = BoundaryViolationNotification.objects.filter(status='pending').values('boat__mfbr_number', 'mfbr_number')
     for v in violations:
@@ -1784,10 +1836,34 @@ def gps_geojson(request):
     # CRITICAL: Fresh cache per request to avoid stale is_active status
     boat_cache = {}
     tracker_cache = {}
+    status_cache = {}  # Cache for TrackerStatusEvent lookups
 
     for gps in gps_data:
         age_seconds = int((now - gps.timestamp).total_seconds())
-        status_flag = "online" if age_seconds <= threshold_seconds else "offline"
+        
+        # Get tracker_id for status lookup
+        trk_id = getattr(gps, 'tracker_id', None)
+        
+        # Try to get status from TrackerStatusEvent first (matches tracker history)
+        status_flag = None
+        if trk_id and trk_id not in status_cache:
+            # Get the most recent status event for this tracker
+            last_status_event = TrackerStatusEvent.objects.filter(tracker_id=trk_id).order_by('-timestamp').first()
+            if last_status_event:
+                status_cache[trk_id] = last_status_event.status
+                logger.info(f"[GPS_GEOJSON] Found status event for tracker {trk_id}: {last_status_event.status}")
+            else:
+                status_cache[trk_id] = None
+                logger.info(f"[GPS_GEOJSON] No status event found for tracker {trk_id}, will use age-based fallback")
+        
+        if trk_id and status_cache.get(trk_id):
+            status_flag = status_cache[trk_id]
+            logger.info(f"[GPS_GEOJSON] Using cached status for tracker {trk_id}: {status_flag}")
+        else:
+            # Fallback to age-based status if no TrackerStatusEvent exists
+            status_flag = "online" if age_seconds <= threshold_seconds else "offline"
+            logger.info(f"[GPS_GEOJSON] Using age-based status for tracker {trk_id or 'unknown'}: {status_flag} (age: {age_seconds}s)")
+        
         mfbr = gps.mfbr_number
         
         # Check if boat is in violation (based on MFBR only to avoid ID type mismatches)
@@ -1990,7 +2066,7 @@ def ingest_positions(request):
             time_since_last = dj_tz.now() - device.last_seen_at
             if time_since_last.total_seconds() > 600:
                 connection_status = "reconnected_after_outage"
-            elif time_since_last.total_seconds() > 120:
+            elif time_since_last.total_seconds() > 90:  # Reduced from 120s: trackers posting every 60s will be stable
                 connection_status = "irregular"
     except _IngestValidationError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
@@ -2035,9 +2111,80 @@ def ingest_positions(request):
     )
     DeviceToken.objects.filter(pk=device.pk).update(last_seen_at=timezone.now())
     
+    # Record status transition using state machine
+    actual_status = 'online'  # Default for WebSocket
+    if tracker_id:
+        from .models import TrackerStatusEvent
+        
+        # Get time since last seen for debugging
+        time_since_last_str = "N/A"
+        if device.last_seen_at:
+            time_since_last = dj_tz.now() - device.last_seen_at
+            time_since_last_str = f"{time_since_last.total_seconds():.1f}s"
+        
+        # Determine current status based on connection
+        current_status = 'online'  # Default: receiving data means online
+        if connection_status == "reconnected_after_outage":
+            # Was offline (600+ seconds), now back
+            current_status = 'online'  # Will become 'reconnected' if previous was offline
+        elif connection_status == "irregular":
+            current_status = 'reconnecting'  # Intermittent signal
+        
+        logger.info(f"[STATUS_DEBUG] Tracker {tracker_id}: connection_status={connection_status}, time_since_last={time_since_last_str}, determined_status={current_status}")
+        
+        # Record the transition (state machine will handle deduplication)
+        event, created = TrackerStatusEvent.record_transition(
+            tracker_id=tracker_id,
+            new_status=current_status,
+            timestamp=gps_data.timestamp,
+            mfbr_number=mfbr,
+            boat_id=boat_id,
+            latitude=lat,
+            longitude=lng
+        )
+        
+        if created and event:
+            logger.info(f"[STATUS_DEBUG] ✅ Transition recorded: {tracker_id} → {event.status} (from {event.previous_status})")
+            actual_status = event.status  # Use the recorded status for WebSocket
+        else:
+            # No transition, check what the current status is
+            last_event = TrackerStatusEvent.objects.filter(tracker_id=tracker_id).order_by('-timestamp').first()
+            if last_event:
+                actual_status = last_event.status
+                logger.info(f"[STATUS_DEBUG] No transition (status unchanged), using last status: {actual_status}")
+            else:
+                logger.warning(f"[STATUS_DEBUG] No transition and no previous status event found for {tracker_id}")
+    
     crossing_result = None
     beep_flag = False
     beep_duration = 5
+    
+    # Check boundary crossing and violations using existing logic
+    # Your existing logic: 15-min dwell + clears if boat returns home ("just passing through")
+    if mfbr and tracker_id:
+        try:
+            from .boundary_service import check_and_notify_boundary_crossing
+            
+            logger.info(f"[BOUNDARY_CHECK] Checking crossing for {mfbr} at ({lat},{lng})")
+            crossing_result = check_and_notify_boundary_crossing(
+                boat_id=boat_id,
+                latitude=lat,
+                longitude=lng,
+                mfbr_number=mfbr,
+                tracker_id=tracker_id
+            )
+            
+            if crossing_result:
+                if crossing_result.get('crossing_detected'):
+                    logger.info(f"[BOUNDARY] ✅ Crossing detected for {mfbr}: {crossing_result.get('from_municipality')} → {crossing_result.get('to_municipality')}")
+                
+                # Check if violation alert was sent (boat dwelled 15+ mins)
+                if crossing_result.get('dwell_alert_sent'):
+                    logger.warning(f"[BOUNDARY] 🚨 VIOLATION ALERT for {mfbr}: Dwelled 15+ minutes in {crossing_result.get('to_municipality')}")
+                    beep_flag = True
+                    beep_duration = 10  # Longer beep for violation
+        except Exception as e:
+            logger.error(f"[BOUNDARY] Error checking boundary crossing for {mfbr}: {e}", exc_info=True)
     
     # Broadcast via WebSocket
     channel_layer = get_channel_layer()
@@ -2076,6 +2223,7 @@ def ingest_positions(request):
                         boat_is_active = getattr(boat, 'is_active', True)
                         registered_municipality = boat.registered_municipality
                         boat_name = str(boat.boat_name).strip() if boat.boat_name else None
+                        logger.info(f"[GPS_INGEST] Boat lookup result: MFBR={mfbr}, boat_name={boat_name}, registered_municipality={registered_municipality}, is_active={boat_is_active}")
                 except Exception as e:
                     logger.error(f"Boat lookup error for {mfbr}: {e}")
             
@@ -2113,9 +2261,10 @@ def ingest_positions(request):
             
             # CRITICAL: Skip WebSocket broadcast for deactivated boats
             if not boat_is_active:
-                logger.info(f"[GPS_INGEST] 🚫 Skipping WebSocket broadcast for deactivated boat: MFBR={mfbr}")
+                logger.warning(f"[GPS_INGEST] 🚫 Skipping WebSocket broadcast for deactivated boat: MFBR={mfbr}")
                 # Don't broadcast but GPS data is already saved for historical records
             else:
+                logger.info(f"[GPS_INGEST] ✅ Broadcasting GPS update: tracker_id={tracker_id}, MFBR={mfbr}, lat={lat}, lng={lng}, status={actual_status}")
                 # Boat is active, proceed with WebSocket broadcast
                 if not boat_name and tracker and hasattr(tracker, 'boat_name'):
                     boat_name = tracker.boat_name
@@ -2150,7 +2299,7 @@ def ingest_positions(request):
                         "latitude": lat,
                         "longitude": lng,
                         "timestamp": gps_data.timestamp.isoformat(),
-                        "status": "online",
+                        "status": actual_status,
                         "in_violation": is_in_violation,
                         "identifier_icon": identifier_icon,  # Use Municipality's icon for consistency
                     }
@@ -2166,8 +2315,9 @@ def ingest_positions(request):
                             }
                         }
                     )
+                    logger.info(f"[GPS_INGEST] 📡 WebSocket broadcast successful for {unique_boat_id}")
                 except Exception as ws_error:
-                    logger.error(f"WebSocket broadcast error: {ws_error}")
+                    logger.error(f"[GPS_INGEST] ❌ WebSocket broadcast error: {ws_error}")
     
     total_processing_time = (time.time() - start_time) * 1000
     diagnostics = {
@@ -2543,6 +2693,7 @@ class MunicipalityBoundaryViewSet(viewsets.ModelViewSet):
     
 class ImportFisherfolkExcelView(APIView):
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request, *args, **kwargs):
         file_obj = request.FILES.get("file")
@@ -2550,128 +2701,173 @@ class ImportFisherfolkExcelView(APIView):
             return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            df = _read_uploaded_table(file_obj)
+            df = pd.read_excel(file_obj)
         except Exception as e:
             return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get default admin user for created_by
+        # ✅ Get default admin user for created_by
         User = get_user_model()
         default_user = User.objects.filter(is_superuser=True).first()
         if not default_user:
             return Response({"error": "No superuser found. Please create an admin user first."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Required columns
-        required_columns = [
-            "registration_number", "salutations", "last_name", "first_name", "middle_name",
-            "appelation", "birth_date", "age", "birth_place", "civil_status", "sex",
-            "contact_number", "nationality", "fisherfolk_status", "mothers_maidenname",
-            "fishing_ground", "fma_number", "religion", "educational_background",
-            "household_month_income", "other_source_income", "farming_income",
-            "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-            "with_voterID", "voterID_number",  "is_CCT_4ps", "is_ICC", "main_source_livelihood",
-            "other_source_livelihood", "street", "barangay", "municipality", "province",
-            "region", "residency_years", "barangay_verifier", "position", "verified_date",
-            "contact_fname", "contact_mname", "contact_lname", "contact_relationship", "contact_contactno",
-            "contact_municipality", "contact_barangay", "total_no_household_memb", "no_male",
-            "no_female", "no_children", "no_in_school", "no_out_school", "no_employed",
-            "no_unemployed", "org_name", "member_since", "org_position"
+        core_required = [
+            "registration_number", "last_name", "first_name", "birth_date",
+            "sex", "contact_number", "birth_place", "civil_status", "nationality"
         ]
-
-        # Check missing columns
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
+        
+        missing_core = [col for col in core_required if col not in df.columns]
+        if missing_core:
             return Response(
-                {"error": "Missing columns", "missing_columns": missing_columns},
+                {"error": f"Missing required columns: {', '.join(missing_core)}", "missing_columns": missing_core},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        imported, errors = 0, []
+        imported, skipped, errors, warnings = 0, 0, [], []
+        
+        def safe_get(row, col, default=None):
+            if col not in df.columns:
+                return default
+            val = row.get(col)
+            if pd.isna(val) or (isinstance(val, str) and val.strip() == ""):
+                return default
+            return val
+        
+        def clean_bool(val):
+            if pd.isna(val): return False
+            if isinstance(val, bool): return val
+            if isinstance(val, (int, float)): return bool(val)
+            if isinstance(val, str): return val.strip().lower() in ('true', 'yes', '1', 'y')
+            return False
 
         for idx, row in df.iterrows():
-            fisherfolk_data = {col: row[col] for col in required_columns}
+            row_num = idx + 2
+            try:
+                fisherfolk_data = {}
+                for field in core_required:
+                    fisherfolk_data[field] = safe_get(row, field)
+                fisherfolk_data["salutations"] = safe_get(row, "salutations", "")
+                fisherfolk_data["middle_name"] = safe_get(row, "middle_name", "")
+                fisherfolk_data["appelation"] = safe_get(row, "appelation", "")
+                fisherfolk_data["age"] = safe_get(row, "age", None)
+                fisherfolk_data["fisherfolk_status"] = safe_get(row, "fisherfolk_status", "")
+                fisherfolk_data["mothers_maidenname"] = safe_get(row, "mothers_maidenname", "")
+                fisherfolk_data["fishing_ground"] = safe_get(row, "fishing_ground", "")
+                fisherfolk_data["fma_number"] = safe_get(row, "fma_number", "")
+                fisherfolk_data["religion"] = safe_get(row, "religion", "")
+                fisherfolk_data["educational_background"] = safe_get(row, "educational_background", "")
+                fisherfolk_data["household_month_income"] = safe_get(row, "household_month_income", "")
+                fisherfolk_data["other_source_income"] = safe_get(row, "other_source_income", "")
+                fisherfolk_data["farming_income"] = clean_bool(safe_get(row, "farming_income", False))
+                fisherfolk_data["farming_income_salary"] = safe_get(row, "farming_income_salary", None)
+                fisherfolk_data["fisheries_income"] = clean_bool(safe_get(row, "fisheries_income", False))
+                fisherfolk_data["fisheries_income_salary"] = safe_get(row, "fisheries_income_salary", None)
+                fisherfolk_data["with_voterID"] = clean_bool(safe_get(row, "with_voterID", False))
+                fisherfolk_data["voterID_number"] = safe_get(row, "voterID_number", "")
+                fisherfolk_data["is_CCT_4ps"] = clean_bool(safe_get(row, "is_CCT_4ps", False))
+                fisherfolk_data["is_ICC"] = clean_bool(safe_get(row, "is_ICC", False))
+                fisherfolk_data["main_source_livelihood"] = safe_get(row, "main_source_livelihood", "")
+                fisherfolk_data["other_source_livelihood"] = safe_get(row, "other_source_livelihood", "")
 
-            # --- Clean phone numbers ---
-            for phone_field in ["contact_number", "contact_contactno"]:
-                if fisherfolk_data.get(phone_field):
-                    num = str(fisherfolk_data[phone_field]).strip()
-                    if "." in num:
-                        num = num.split(".")[0]
-                    if not num.startswith("09") and not num.startswith("+639"):
-                        if num.startswith("9"):
-                            num = "0" + num
-                    fisherfolk_data[phone_field] = num
-
-            # --- Clean date fields ---
-            for date_field in ["birth_date", "verified_date", "member_since"]:
-                if fisherfolk_data.get(date_field):
-                    val = fisherfolk_data[date_field]
+                if fisherfolk_data.get("contact_number"):
+                    num = str(fisherfolk_data["contact_number"]).strip()
+                    if "." in num: num = num.split(".")[0]
+                    if num and not num.startswith(("09", "+639")):
+                        if num.startswith("9") and len(num) == 10: num = "0" + num
+                    fisherfolk_data["contact_number"] = num
+                
+                birth_date_raw = fisherfolk_data.get("birth_date")
+                if birth_date_raw:
                     try:
-                        if hasattr(val, "strftime"):  # datetime/date object
-                            fisherfolk_data[date_field] = val.strftime("%Y-%m-%d")
+                        if hasattr(birth_date_raw, "strftime"):
+                            fisherfolk_data["birth_date"] = birth_date_raw.strftime("%Y-%m-%d")
                         else:
-                            parsed = pd.to_datetime(val, errors="coerce")
+                            parsed = pd.to_datetime(birth_date_raw, errors="coerce")
                             if pd.notnull(parsed):
-                                fisherfolk_data[date_field] = parsed.strftime("%Y-%m-%d")
-                    except Exception:
-                        pass
+                                fisherfolk_data["birth_date"] = parsed.strftime("%Y-%m-%d")
+                    except: pass
+                
+                if not fisherfolk_data["registration_number"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"registration_number": "Required"}})
+                    continue
+                if not fisherfolk_data["birth_date"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"birth_date": "Required or invalid"}})
+                    continue
 
-            # --- Main fisherfolk ---
-            main_fields = [
-                "registration_number", "salutations", "last_name", "first_name",
-                "middle_name", "appelation", "birth_date", "age", "birth_place",
-                "civil_status", "sex", "contact_number", "nationality",
-                "fisherfolk_status", "mothers_maidenname", "fishing_ground",
-                "fma_number", "religion", "educational_background",
-                "household_month_income", "other_source_income", "farming_income",
-                "farming_income_salary", "fisheries_income", "fisheries_income_salary",
-                "with_voterID", "voterID_number",  "is_CCT_4ps", "is_ICC", "main_source_livelihood",
-                "other_source_livelihood"
-            ]
-            fisherfolk_core = {field: fisherfolk_data[field] for field in main_fields}
+                main_fields = [
+                    "registration_number", "salutations", "last_name", "first_name",
+                    "middle_name", "appelation", "birth_date", "age", "birth_place",
+                    "civil_status", "sex", "contact_number", "nationality",
+                    "fisherfolk_status", "mothers_maidenname", "fishing_ground",
+                    "fma_number", "religion", "educational_background",
+                    "household_month_income", "other_source_income", "farming_income",
+                    "farming_income_salary", "fisheries_income", "fisheries_income_salary",
+                    "with_voterID", "voterID_number", "is_CCT_4ps", "is_ICC",
+                    "main_source_livelihood", "other_source_livelihood"
+                ]
+                fisherfolk_core = {field: fisherfolk_data[field] for field in main_fields}
+                # Pass request context so serializer can access user for created_by
+                serializer = FisherfolkSerializer(data=fisherfolk_core, context={'request': request})
+                if serializer.is_valid():
+                    fisherfolk = serializer.save(created_by=default_user)
+                    imported += 1
+                    address_data = {f: safe_get(row, f, "") for f in ["street", "barangay", "municipality", "province", "region", "residency_years", "barangay_verifier", "position"]}
+                    verified_date_raw = safe_get(row, "verified_date")
+                    if verified_date_raw:
+                        try:
+                            if hasattr(verified_date_raw, "strftime"): address_data["verified_date"] = verified_date_raw.strftime("%Y-%m-%d")
+                            else:
+                                parsed = pd.to_datetime(verified_date_raw, errors="coerce")
+                                if pd.notnull(parsed): address_data["verified_date"] = parsed.strftime("%Y-%m-%d")
+                        except: pass
+                    if any(v for v in address_data.values() if v):
+                        try: Address.objects.create(fisherfolk=fisherfolk, **address_data)
+                        except: pass
+                    household_data = {f: safe_get(row, f, 0) for f in ["total_no_household_memb", "no_male", "no_female", "no_children", "no_in_school", "no_out_school", "no_employed", "no_unemployed"]}
+                    if any(household_data.values()):
+                        try: Household.objects.create(fisherfolk=fisherfolk, **household_data)
+                        except: pass
+                    org_name = safe_get(row, "org_name", "")
+                    if org_name:
+                        try:
+                            member_since_raw = safe_get(row, "member_since")
+                            member_since = None
+                            if member_since_raw:
+                                try:
+                                    if hasattr(member_since_raw, "strftime"): member_since = member_since_raw.strftime("%Y-%m-%d")
+                                    else:
+                                        parsed = pd.to_datetime(member_since_raw, errors="coerce")
+                                        if pd.notnull(parsed): member_since = parsed.strftime("%Y-%m-%d")
+                                except: pass
+                            Organization.objects.create(fisherfolk=fisherfolk, org_name=org_name, member_since=member_since, org_position=safe_get(row, "org_position", ""))
+                        except: pass
+                    contact_data = {f: safe_get(row, f, "") for f in ["contact_fname", "contact_lname", "contact_mname", "contact_relationship", "contact_municipality", "contact_barangay"]}
+                    contact_contactno_raw = safe_get(row, "contact_contactno", "")
+                    if contact_contactno_raw:
+                        num = str(contact_contactno_raw).strip()
+                        if "." in num: num = num.split(".")[0]
+                        if num and not num.startswith(("09", "+639")):
+                            if num.startswith("9") and len(num) == 10: num = "0" + num
+                        contact_data["contact_contactno"] = num
+                    if any(v for v in contact_data.values() if v):
+                        try: Contacts.objects.create(fisherfolk=fisherfolk, **contact_data)
+                        except: pass
+                else:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": serializer.errors})
+            except Exception as e:
+                skipped += 1
+                errors.append({"row": row_num, "errors": {"exception": str(e)}})
 
-            serializer = FisherfolkSerializer(data=fisherfolk_core)
-            if serializer.is_valid():
-                fisherfolk = serializer.save(created_by=default_user)  # only here
-                imported += 1
+        response_data = {"imported": imported, "skipped": skipped, "total_rows": len(df), "errors": errors, "warnings": warnings}
+        return Response(response_data, status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
 
-                # --- Related models (no user field here) ---
-                address_fields = ["street", "barangay", "municipality", "province", "region",
-                                  "residency_years", "barangay_verifier", "position", "verified_date"]
-                address_data = {f: fisherfolk_data.get(f) for f in address_fields}
-                if any(address_data.values()):
-                    Address.objects.create(fisherfolk=fisherfolk, **address_data)
-
-                household_fields = ["total_no_household_memb", "no_male", "no_female", "no_children",
-                                    "no_in_school", "no_out_school", "no_employed", "no_unemployed"]
-                household_data = {f: fisherfolk_data.get(f) for f in household_fields}
-                if any(household_data.values()):
-                    Household.objects.create(fisherfolk=fisherfolk, **household_data)
-
-                org_fields = ["org_name", "member_since", "org_position"]
-                org_data = {f: fisherfolk_data.get(f) for f in org_fields}
-                if any(org_data.values()):
-                    Organization.objects.create(fisherfolk=fisherfolk, **org_data)
-
-                contact_fields = ["contact_fname", "contact_lname", "contact_mname", "contact_relationship",
-                                  "contact_contactno", "contact_municipality", "contact_barangay"]
-                contact_data = {f: fisherfolk_data.get(f) for f in contact_fields}
-                if any(contact_data.values()):
-                    Contacts.objects.create(fisherfolk=fisherfolk, **contact_data)
-
-            else:
-                errors.append({
-                    "row": idx + 2,
-                    "errors": serializer.errors
-                })
-
-        if errors:
-            return Response({"imported": imported, "errors": errors}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({"imported": imported, "errors": []}, status=status.HTTP_200_OK)
-
-# --- Import Boat Excel API ---
 class ImportBoatExcelView(APIView):
+    """Enhanced Excel import for Boats"""
     parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request, *args, **kwargs):
         file_obj = request.FILES.get("file")
@@ -2679,75 +2875,90 @@ class ImportBoatExcelView(APIView):
             return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            df = _read_uploaded_table(file_obj)
+            df = pd.read_excel(file_obj, engine=None)
         except Exception as e:
             return Response({"error": f"Failed to read Excel file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-        required_columns = [
-            "mfbr_number", "application_date", "type_of_registration", "fisherfolk_registration_number",
-            "type_of_ownership", "boat_name", "boat_type", "fishing_ground", "fma_number",
-            "built_place", "no_fishers", "material_used", "homeport", "built_year",
-            "engine_make", "serial_number", "horsepower", "registered_municipality"
-        ]
+        core_required = ["mfbr_number", "boat_name", "fisherfolk_registration_number",
+                        "application_date", "type_of_registration", "type_of_ownership",
+                        "boat_type", "fishing_ground", "fma_number", "built_place",
+                        "no_fishers", "material_used", "homeport", "built_year"]
 
-        missing = [c for c in required_columns if c not in df.columns]
-        if missing:
-            return Response({"error": "Missing columns", "missing_columns": missing}, status=status.HTTP_400_BAD_REQUEST)
+        missing_core = [col for col in core_required if col not in df.columns]
+        if missing_core:
+            return Response({"error": f"Missing required columns: {', '.join(missing_core)}",
+                           "missing_columns": missing_core}, status=status.HTTP_400_BAD_REQUEST)
 
-        imported, errors = 0, []
-        for idx, row in df.iterrows():
-            # Build dict and coerce types
-            data = {col: row[col] for col in required_columns}
+        imported, skipped, errors = 0, 0, []
 
-            # Clean strings
-            for key in [
-                "mfbr_number","type_of_registration","fisherfolk_registration_number","type_of_ownership",
-                "boat_name","boat_type","fishing_ground","fma_number","built_place","material_used",
-                "homeport","engine_make","serial_number","horsepower","registered_municipality"
-            ]:
-                if data.get(key) is not None and not pd.isna(data.get(key)):
-                    data[key] = str(data[key]).strip()
-                else:
-                    data[key] = None
+        def safe_get(row, col, default=None):
+            if col not in df.columns:
+                return default
+            val = row.get(col)
+            return default if pd.isna(val) or (isinstance(val, str) and val.strip() == "") else val
 
-            # Dates
+        def clean_date(date_val):
+            if not date_val or pd.isna(date_val):
+                return None
             try:
-                val = row["application_date"]
-                if hasattr(val, "strftime"):
-                    data["application_date"] = val.strftime("%Y-%m-%d")
-                else:
-                    parsed = pd.to_datetime(val, errors="coerce")
-                    if pd.notnull(parsed):
-                        data["application_date"] = parsed.strftime("%Y-%m-%d")
-            except Exception:
-                pass
+                if hasattr(date_val, "strftime"):
+                    return date_val.strftime("%Y-%m-%d")
+                parsed = pd.to_datetime(date_val, errors="coerce")
+                return parsed.strftime("%Y-%m-%d") if pd.notnull(parsed) else None
+            except:
+                return None
 
-            # Integers
-            def _to_int(v):
+        for idx, row in df.iterrows():
+            row_num = idx + 2
+            try:
+                fisherfolk_reg = safe_get(row, "fisherfolk_registration_number")
+                if not fisherfolk_reg:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": "Required"}, "type": "validation"})
+                    continue
+
                 try:
-                    if pd.isna(v) or v == "":
-                        return None
-                    return int(str(v).split(".")[0])
-                except Exception:
-                    return None
-            data["no_fishers"] = _to_int(row.get("no_fishers"))
-            data["built_year"] = _to_int(row.get("built_year"))
+                    fisherfolk = Fisherfolk.objects.get(registration_number=fisherfolk_reg)
+                except Fisherfolk.DoesNotExist:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": f"Fisherfolk '{fisherfolk_reg}' not found"}, "type": "validation"})
+                    continue
 
-            # Submit to serializer
-            serializer = BoatSerializer(data=data)
-            if serializer.is_valid():
-                try:
-                    serializer.save()
-                    imported += 1
-                except Exception as e:
-                    errors.append({"row": idx + 2, "errors": str(e)})
-            else:
-                errors.append({"row": idx + 2, "errors": serializer.errors})
+                boat_data = {
+                    "mfbr_number": safe_get(row, "mfbr_number"),
+                    "boat_name": safe_get(row, "boat_name", "Unnamed"),
+                    "fisherfolk_registration_number": fisherfolk,
+                    "application_date": clean_date(safe_get(row, "application_date")),
+                    "type_of_registration": safe_get(row, "type_of_registration"),
+                    "type_of_ownership": safe_get(row, "type_of_ownership"),
+                    "boat_type": safe_get(row, "boat_type"),
+                    "fishing_ground": safe_get(row, "fishing_ground"),
+                    "fma_number": safe_get(row, "fma_number"),
+                    "built_place": safe_get(row, "built_place"),
+                    "no_fishers": safe_get(row, "no_fishers", 0),
+                    "material_used": safe_get(row, "material_used"),
+                    "homeport": safe_get(row, "homeport"),
+                    "built_year": safe_get(row, "built_year"),
+                    "engine_make": safe_get(row, "engine_make", ""),
+                    "serial_number": safe_get(row, "serial_number", ""),
+                    "horsepower": safe_get(row, "horsepower", "")
+                }
 
-        status_code = status.HTTP_200_OK if not errors else status.HTTP_400_BAD_REQUEST
-        return Response({"imported": imported, "errors": errors}, status=status_code)
+                if not boat_data["application_date"]:
+                    skipped += 1
+                    errors.append({"row": row_num, "errors": {"application_date": "Required or invalid format"}, "type": "validation"})
+                    continue
 
-        
+                Boat.objects.create(**boat_data)
+                imported += 1
+
+            except Exception as e:
+                skipped += 1
+                errors.append({"row": row_num, "errors": {"exception": str(e)}, "type": "exception"})
+
+        return Response({"imported": imported, "skipped": skipped, "total_rows": len(df), "errors": errors},
+                       status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
+                       
 # Municipality Management ViewSets
 class MunicipalityViewSet(viewsets.ModelViewSet):
     queryset = Municipality.objects.all()
@@ -3048,7 +3259,6 @@ class BarangayVerifierViewSet(viewsets.ModelViewSet):
         assigned = BarangayVerifier.objects.filter(
             municipality_id=municipality_id,
             barangay_id=barangay_id,
-            is_active=True,
         ).values_list('position', flat=True)
         
         return Response({'assigned_positions': list(assigned)})
@@ -3180,56 +3390,98 @@ def tracker_history(request, tracker_id):
         if not gps_points and ident:
             gps_points = list(GpsData.objects.filter(tracker_id=ident).order_by('-timestamp')[:200])
 
-        # 2) Status events (online / offline / reconnecting)
-        if filter_type in ['all', 'status'] and gps_points:
-            reconnect_threshold = timedelta(minutes=3)
-            offline_threshold = timedelta(minutes=10)
-            previous_status = None
-            now_ts = timezone.now()
-            for i, point in enumerate(gps_points):
-                # Determine status:
-                # - For the newest point (i == 0), compare to NOW
-                # - For historical points, compare the gap to the next older point
-                if i == 0:
-                    age = now_ts - point.timestamp
-                    if age >= offline_threshold:
-                        current_status = 'offline'
-                    elif age >= reconnect_threshold:
-                        current_status = 'reconnecting'
+        # 2) Status events from persisted TrackerStatusEvent records
+        if filter_type in ['all', 'status']:
+            from .models import TrackerStatusEvent
+            
+            # Build query for status events
+            status_q = Q(tracker_id=ident)
+            if mfbr:
+                status_q |= Q(mfbr_number=mfbr)
+            if boat_id is not None:
+                status_q |= Q(boat_id=boat_id)
+            
+            # Get persisted status events (already filtered by state machine)
+            status_events = list(TrackerStatusEvent.objects.filter(status_q).order_by('-timestamp')[:100])
+            
+            # Fallback: if no persisted events exist, compute from GPS points
+            if not status_events and gps_points:
+                reconnect_threshold = timedelta(minutes=3)
+                offline_threshold = timedelta(minutes=10)
+                previous_status = None
+                now_ts = timezone.now()
+                for i, point in enumerate(gps_points):
+                    # Determine status:
+                    # - For the newest point (i == 0), compare to NOW
+                    # - For historical points, compare the gap to the next older point
+                    if i == 0:
+                        age = now_ts - point.timestamp
+                        if age >= offline_threshold:
+                            current_status = 'offline'
+                        elif age >= reconnect_threshold:
+                            current_status = 'reconnecting'
+                        else:
+                            current_status = 'online'
                     else:
-                        current_status = 'online'
-                else:
-                    gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
-                    if gap >= offline_threshold:
-                        current_status = 'offline'
-                    elif gap >= reconnect_threshold:
-                        current_status = 'reconnecting'
-                    else:
-                        current_status = 'online'
+                        gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
+                        if gap >= offline_threshold:
+                            current_status = 'offline'
+                        elif gap >= reconnect_threshold:
+                            current_status = 'reconnecting'
+                        else:
+                            current_status = 'online'
 
-                # Emit only when the status actually changes in time sequence
-                should_emit = current_status != previous_status
-                if should_emit:
-                    event_title = {
+                    # Emit only when the status actually changes in time sequence
+                    should_emit = current_status != previous_status
+                    if should_emit:
+                        event_title = {
+                            'online': 'Tracker Online',
+                            'offline': 'Tracker Offline',
+                            'reconnecting': 'Tracker Reconnecting'
+                        }.get(current_status, 'Status Change')
+                        timeline_events.append({
+                            'id': f'status_{point.id}',
+                            'event_type': current_status,
+                            'title': event_title,
+                            'description': {
+                                'online': 'Tracker came online and started transmitting data',
+                                'offline': 'Tracker went offline (no data for 10+ minutes)',
+                                'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)'
+                            }.get(current_status, 'Status changed'),
+                            'timestamp': point.timestamp.isoformat(),
+                            'metadata': {
+                                'location': {'lat': float(point.latitude), 'lng': float(point.longitude)}
+                            }
+                        })
+                        previous_status = current_status
+            else:
+                # Use persisted events
+                for event in status_events:
+                    event_title_map = {
                         'online': 'Tracker Online',
                         'offline': 'Tracker Offline',
-                        'reconnecting': 'Tracker Reconnecting'
-                    }.get(current_status, 'Status Change')
+                        'reconnecting': 'Tracker Reconnecting',
+                        'reconnected': 'Tracker Reconnected'
+                    }
+                    event_desc_map = {
+                        'online': 'Tracker came online and started transmitting data',
+                        'offline': 'Tracker went offline (no data for 10+ minutes)',
+                        'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)',
+                        'reconnected': 'Tracker reconnected successfully after being offline'
+                    }
+                    
                     timeline_events.append({
-                        'id': f'status_{point.id}',
-                        'event_type': current_status,
-                        'title': event_title,
-                        'description': {
-                            'online': 'Tracker came online and started transmitting data',
-                            'offline': 'Tracker went offline (no data for 10+ minutes)',
-                            'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)'
-                        }.get(current_status, 'Status changed'),
-                        'timestamp': point.timestamp.isoformat(),
+                        'id': f'status_{event.id}',
+                        'event_type': event.status,
+                        'title': event_title_map.get(event.status, 'Status Change'),
+                        'description': event_desc_map.get(event.status, 'Status changed'),
+                        'timestamp': event.timestamp.isoformat(),
                         'metadata': {
-                            'location': {'lat': float(point.latitude), 'lng': float(point.longitude)}
+                            'location': {'lat': float(event.latitude) if event.latitude else None, 'lng': float(event.longitude) if event.longitude else None},
+                            'session_start': event.session_start.isoformat() if event.session_start else None,
+                            'previous_status': event.previous_status
                         }
                     })
-                    previous_status = current_status
 
         # 3) Boundary crossings
         if filter_type in ['all', 'movements']:
@@ -3319,24 +3571,6 @@ def tracker_history(request, tracker_id):
                             'severity': 'high' if duration_mins > 60 else 'medium'
                         }
                     })
-
-        # 5) Idle state
-        if filter_type in ['all', 'movements']:
-            try:
-                device_token = DeviceToken.objects.filter(
-                    Q(tracker__BirukBilugID=ident) | Q(name=ident) | Q(boat_id=boat_id if boat_id is not None else -1)
-                ).first()
-                if device_token and device_token.is_idle:
-                    timeline_events.append({
-                        'id': f'idle_{device_token.id}',
-                        'event_type': 'idle',
-                        'title': 'Boat Idle/Anchored',
-                        'description': 'Boat has been stationary for 15+ minutes',
-                        'timestamp': (datetime.now() - timedelta(minutes=15)).isoformat(),
-                        'metadata': {}
-                    })
-            except Exception as e:
-                logger.warning(f"Error checking idle state: {e}")
 
         # Sort timeline by timestamp (newest first) using robust, TZ-safe parsing
         from django.utils.dateparse import parse_datetime

@@ -60,6 +60,9 @@ urlpatterns = [
     
     # Import fisherfolk from Excel
     path('fisherfolk/import-excel/', ImportFisherfolkExcelView.as_view(), name='import_fisherfolk_excel'),
+    
+    # Import boats from Excel
+    path('boats/import-excel/', ImportBoatExcelView.as_view(), name='import_boat_excel'),
 
     # Import boats from Excel
     path('boats/import-excel/', ImportBoatExcelView.as_view(), name='import_boats_excel'),

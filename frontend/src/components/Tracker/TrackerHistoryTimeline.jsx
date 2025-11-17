@@ -35,20 +35,29 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
         params: { filter }
       });
       let data = Array.isArray(response.data) ? response.data : [];
-      // Determine most recent status event
-      const statusEvents = data.filter(e => ['online','offline','reconnecting'].includes(e.event_type))
+      
+      // Find the registration event timestamp
+      const registrationEvent = data.find(e => e.event_type === 'registered');
+      
+      // If registration event exists, filter out events before registration
+      if (registrationEvent) {
+        const registrationTimestamp = new Date(registrationEvent.timestamp);
+        data = data.filter(event => {
+          const eventTimestamp = new Date(event.timestamp);
+          // Keep events that are at or after registration time
+          return eventTimestamp >= registrationTimestamp;
+        });
+      }
+      
+      // Determine most recent status event (including 'reconnected' which means online)
+      const statusEvents = data.filter(e => ['online','offline','reconnecting','reconnected'].includes(e.event_type))
                                .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
       if (statusEvents.length > 0) {
         const newest = statusEvents[0];
-        setCurrentStatus(newest.event_type);
+        // Treat 'reconnected' as 'online' for display purposes
+        const displayStatus = newest.event_type === 'reconnected' ? 'online' : newest.event_type;
+        setCurrentStatus(displayStatus);
         setLastReportedAt(newest.timestamp);
-        // Avoid duplicate "online" entries when status hasn't changed
-        if (newest.event_type === 'online' && lastReportedStatusRef.current === 'online') {
-          // Drop the very first online event to prevent duplicate reporting
-          const newestTs = newest.timestamp;
-          data = data.filter(ev => !(ev.event_type === 'online' && ev.timestamp === newestTs));
-        }
-        lastReportedStatusRef.current = newest.event_type;
       } else {
         setCurrentStatus('unknown');
         setLastReportedAt(null);
@@ -72,6 +81,8 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
         return <WifiOff {...iconProps} className="text-gray-500" />;
       case 'reconnecting':
         return <Activity {...iconProps} className="text-yellow-600 animate-pulse" />;
+      case 'reconnected':
+        return <Check {...iconProps} className="text-green-600" />;
       case 'boundary_crossing':
         return <MapPin {...iconProps} className="text-blue-600" />;
       case 'violation':
@@ -90,6 +101,7 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
       case 'online': return 'bg-green-100 border-green-300';
       case 'offline': return 'bg-gray-100 border-gray-300';
       case 'reconnecting': return 'bg-yellow-100 border-yellow-300';
+      case 'reconnected': return 'bg-green-100 border-green-300';
       case 'boundary_crossing': return 'bg-blue-100 border-blue-300';
       case 'violation': return 'bg-red-100 border-red-300';
       case 'idle': return 'bg-orange-100 border-orange-300';
