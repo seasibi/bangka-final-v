@@ -9,7 +9,6 @@ import logo from "../assets/logo.png";
 const ResetPasswordPage = () => {
   const { uid, token } = useParams();
   const navigate = useNavigate();
-  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,15 +17,13 @@ const ResetPasswordPage = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   const passwordsMatch = useMemo(() => confirmPassword.length > 0 && newPassword === confirmPassword, [newPassword, confirmPassword]);
-  const newEqualsOld = useMemo(() => newPassword.length > 0 && currentPassword.length > 0 && newPassword === currentPassword, [newPassword, currentPassword]);
   const canSubmit = useMemo(() => {
     if (loading) return false;
-    if (!currentPassword || !newPassword || !confirmPassword) return false;
-    if (newPassword.length < 6) return false;
+    if (!newPassword || !confirmPassword) return false;
+    if (newPassword.length < 8) return false;
     if (!passwordsMatch) return false;
-    if (newEqualsOld) return false;
     return true;
-  }, [loading, currentPassword, newPassword, confirmPassword, passwordsMatch, newEqualsOld]);
+  }, [loading, newPassword, confirmPassword, passwordsMatch]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,8 +31,7 @@ const ResetPasswordPage = () => {
 
     if (!canSubmit) {
       if (!passwordsMatch) setError("Passwords do not match");
-      else if (newPassword.length < 6) setError("Password must be at least 6 characters long");
-      else if (newEqualsOld) setError("New password cannot be the same as the current password");
+      else if (newPassword.length < 8) setError("Password must be at least 8 characters long");
       else setError("Please complete all fields");
       return;
     }
@@ -46,8 +42,8 @@ const ResetPasswordPage = () => {
       const response = await axios.post(
         `${API_URLS}password-reset-confirm/${uid}/${token}/`,
         {
-          current_password: currentPassword,
           new_password: newPassword,
+          confirm_password: confirmPassword,
         }
       );
 
@@ -114,28 +110,6 @@ const ResetPasswordPage = () => {
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div>
                     <label
-                      htmlFor="currentPassword"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Current Password
-                    </label>
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      id="currentPassword"
-                      autoComplete="current-password"
-                      required
-                      value={currentPassword}
-                      onChange={(e) => {
-                        setCurrentPassword(e.target.value);
-                        setError("");
-                      }}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Enter current password"
-                    />
-                  </div>
-
-                  <div>
-                    <label
                       htmlFor="newPassword"
                       className="block text-sm font-medium text-gray-700 mb-1"
                     >
@@ -172,9 +146,6 @@ const ResetPasswordPage = () => {
                         )}
                       </button>
                     </div>
-                    {newEqualsOld && (
-                      <p className="mt-1 text-xs text-red-600">New password cannot be the same as the current password.</p>
-                    )}
                   </div>
 
                   <div>

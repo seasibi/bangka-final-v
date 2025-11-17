@@ -931,6 +931,97 @@ class BarangayVerifier(models.Model):
         return f"{self.first_name} {self.last_name} - {self.position} ({loc})"
 
 
+class TrackerStatusEvent(models.Model):
+    """
+    Stores tracker status transition events with state machine logic.
+    Only records status changes, not every GPS ping.
+    """
+    STATUS_CHOICES = [
+        ('online', 'Online'),
+        ('offline', 'Offline'),
+        ('reconnecting', 'Reconnecting'),
+        ('reconnected', 'Reconnected'),
+    ]
+    
+    tracker_id = models.CharField(max_length=50, db_index=True, help_text="BirukBilug tracker ID")
+    mfbr_number = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    boat_id = models.IntegerField(null=True, blank=True, db_index=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    previous_status = models.CharField(max_length=20, null=True, blank=True)
+    
+    # Timestamp of the status change
+    timestamp = models.DateTimeField(db_index=True)
+    
+    # For online sessions: store the initial online timestamp
+    session_start = models.DateTimeField(null=True, blank=True, help_text="Initial online timestamp for this session")
+    
+    # Location at time of status change
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['tracker_id', '-timestamp']),
+            models.Index(fields=['mfbr_number', '-timestamp']),
+        ]
+        verbose_name_plural = 'Tracker Status Events'
+    
+    def __str__(self):
+        return f"{self.tracker_id} - {self.status} at {self.timestamp}"
+    
+    @classmethod
+    def record_transition(cls, tracker_id, new_status, timestamp, mfbr_number=None, boat_id=None, latitude=None, longitude=None):
+        """
+        State machine: Only record status transitions, not duplicate states.
+        Returns (event, created) tuple.
+        """
+        from django.utils import timezone
+        
+        # Get the most recent status event for this tracker
+        last_event = cls.objects.filter(tracker_id=tracker_id).order_by('-timestamp').first()
+        
+        # Determine if this is a state transition
+        previous_status = last_event.status if last_event else None
+        
+        # Skip if status hasn't changed
+        if previous_status == new_status:
+            return (None, False)
+        
+        # Special handling for reconnected state
+        # Online after offline/reconnecting becomes "reconnected"
+        if new_status == 'online' and previous_status in ['offline', 'reconnecting']:
+            new_status = 'reconnected'
+        
+        # Determine session start
+        session_start = None
+        if new_status in ['online', 'reconnected']:
+            if previous_status in ['offline', 'reconnecting', None]:
+                # New session starting
+                session_start = timestamp
+            elif last_event and last_event.session_start:
+                # Continue existing session
+                session_start = last_event.session_start
+        
+        # Create the status event
+        event = cls.objects.create(
+            tracker_id=tracker_id,
+            mfbr_number=mfbr_number,
+            boat_id=boat_id,
+            status=new_status,
+            previous_status=previous_status,
+            timestamp=timestamp,
+            session_start=session_start,
+            latitude=latitude,
+            longitude=longitude
+        )
+        
+        return (event, True)
+
+
 class Signatory(models.Model):
     POSITION_CHOICES = [
         ('Provincial Agriculturist', 'Provincial Agriculturist'),

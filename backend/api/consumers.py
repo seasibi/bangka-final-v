@@ -71,12 +71,15 @@ class GPSConsumer(AsyncWebsocketConsumer):
         """
         try:
             from django.db.models import Q
-            from .models import Boat, BoundaryViolationNotification, BirukbilugTracker
+            from .models import Boat, BoundaryViolationNotification, BirukbilugTracker, TrackerStatusEvent
             # Build dictionary keyed by consistent identifier:
             # prefer MFBR; else tracker_id; else namespaced boat_id
             latest_positions = {}
             threshold_seconds = 300  # 5 minutes
             now = timezone.now()
+            
+            # Cache for TrackerStatusEvent lookups to avoid duplicate queries
+            status_cache = {}
 
             # Recent GPS data ordered by timestamp (newest first)
             recent_gps = GpsData.objects.all().order_by('-timestamp')[:100]
@@ -163,7 +166,24 @@ class GPSConsumer(AsyncWebsocketConsumer):
                         pass
 
                 age_seconds = int((now - gps.timestamp).total_seconds())
-                status = "online" if age_seconds <= threshold_seconds else "offline"
+                
+                # CRITICAL FIX: Use TrackerStatusEvent for status (matches gps_geojson and tracker_history)
+                status = "online"  # Default fallback
+                tracker_id = getattr(gps, 'tracker_id', None)
+                if tracker_id and tracker_id not in status_cache:
+                    # Get the most recent status event for this tracker
+                    last_status_event = TrackerStatusEvent.objects.filter(tracker_id=tracker_id).order_by('-timestamp').first()
+                    if last_status_event:
+                        status_cache[tracker_id] = last_status_event.status
+                    else:
+                        status_cache[tracker_id] = None
+                
+                if tracker_id and status_cache.get(tracker_id):
+                    status = status_cache[tracker_id]
+                else:
+                    # Fallback to age-based status if no TrackerStatusEvent exists
+                    status = "online" if age_seconds <= threshold_seconds else "offline"
+                
                 in_violation = False
                 if resolved_mfbr and resolved_mfbr in active_mfbrs:
                     in_violation = True

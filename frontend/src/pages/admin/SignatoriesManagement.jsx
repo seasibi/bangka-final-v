@@ -22,7 +22,6 @@ const SignatoriesManagement = () => {
   const [error, setError] = useState('');
 
   const SIGNATORY_POSITIONS = [
-    'Provincial Agriculturist',
     'Municipal Agriculturist',
     'Municipal Fishery Coordinator',
     'Mayor'

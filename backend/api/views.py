@@ -507,15 +507,24 @@ def deactivate_current_admin(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
+    """Regular password change for already logged-in users."""
     user = request.user
     current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
 
+    if not current_password or not new_password:
+        return Response({'error': 'Current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
     if not user.check_password(current_password):
         return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if len(str(new_password)) < 8:
+        return Response({'error': 'Password must be at least 8 characters long'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user.check_password(new_password):
+        return Response({'error': 'New password cannot be the same as the current password'}, status=status.HTTP_400_BAD_REQUEST)
+
     user.set_password(new_password)
-    user.must_change_password = False  # Clear the flag after password change
     user.save()
     
     # Log password change
@@ -529,31 +538,65 @@ def change_password(request):
     except Exception as e:
         print(f"Failed to log password change: {e}")
 
-    return Response({'success': 'Password updated successfully'}, status=status.HTTP_200_OK)
+    return Response({'success': 'Password changed successfully'}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_new_password(request):
-    """Allow users with must_change_password=True to set a new password without providing current password"""
+    """Set new password for first-time login (requires temporary password)."""
     user = request.user
+    current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
-    
-    # Only allow this for users who must change their password
+
+    print(f"\n=== SET NEW PASSWORD DEBUG ===")
+    print(f"User: {user.email}")
+    print(f"Must change password: {user.must_change_password}")
+    print(f"Current password provided: {'Yes' if current_password else 'No'} (length: {len(current_password) if current_password else 0})")
+    print(f"New password provided: {'Yes' if new_password else 'No'} (length: {len(new_password) if new_password else 0})")
+    print(f"Stored password hash starts with: {user.password[:20] if user.password else 'None'}...")
+    print(f"Password is hashed: {user.password.startswith('pbkdf2_sha256$') if user.password else False}")
+
+    # Only allow this for users who must change their password on first login
     if not user.must_change_password:
+        print("❌ Error: User does not have must_change_password flag set")
         return Response({'error': 'This endpoint is only for required password changes'}, status=status.HTTP_403_FORBIDDEN)
+
+    if not current_password or not new_password:
+        print("❌ Error: Missing current or new password")
+        return Response({'error': 'Current and new password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check if current password is correct
+    print(f"About to verify password...")
+    print(f"  - Entered password length: {len(current_password)}")
+    print(f"  - Entered password first 2 chars: {current_password[:2] if len(current_password) >= 2 else current_password}")
+    print(f"  - Entered password last 2 chars: {current_password[-2:] if len(current_password) >= 2 else current_password}")
     
-    if not new_password:
-        return Response({'error': 'New password is required'}, status=status.HTTP_400_BAD_REQUEST)
+    password_check = user.check_password(current_password)
+    print(f"Password verification result: {password_check}")
     
-    if len(new_password) < 6:
+    if not password_check:
+        print("❌ Error: Current password is incorrect")
+        print("   Please check the temporary password sent to your email")
+        return Response({'error': 'Current password is incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    print("✅ Current password verified successfully")
+
+    if len(str(new_password)) < 6:
+        print("❌ Error: Password too short")
         return Response({'error': 'Password must be at least 6 characters long'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    if user.check_password(new_password):
+        print("❌ Error: New password same as current")
+        return Response({'error': 'New password cannot be the same as the current password'}, status=status.HTTP_400_BAD_REQUEST)
+
+    print("✅ All validations passed, updating password...")
     user.set_password(new_password)
-    user.must_change_password = False  # Clear the flag after password change
+    user.must_change_password = False
     user.save()
-    
-    # Log password change
+    print("✅ Password updated successfully")
+
+    # Log password change for first-login flow
     try:
         from .models import ActivityLog
         ActivityLog.objects.create(
@@ -633,12 +676,22 @@ def update_user(request, pk):
             return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
         return Response({'error': 'Invalid data.', 'details': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
 def check_email(request):
-    raw = request.GET.get('email', '')
-    target = _canonical_email(raw)
+    """Check if an email is already in use."""
+    if request.method == 'POST':
+        email = request.data.get('email')
+    else:
+        email = request.GET.get('email', '')
+    
+    if not email:
+        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    target = _canonical_email(email)
     # Compare using canonical form across all users (active or not)
     exists = any(_canonical_email(u.email) == target for u in User.objects.all())
-    return JsonResponse({'available': not exists})
+    return Response({'exists': exists, 'available': not exists}, status=status.HTTP_200_OK)
 
 # BOATS Registry
 class BoatViewSet(viewsets.ModelViewSet):
@@ -1771,7 +1824,7 @@ def gps_geojson(request):
     logger.info(f"[GPS_GEOJSON] Found {gps_data.count()} GPS records")
     
     # Get active violations
-    from .models import BoundaryViolationNotification
+    from .models import BoundaryViolationNotification, Municipality, TrackerStatusEvent
     active_violations = set()
     violations = BoundaryViolationNotification.objects.filter(status='pending').values('boat__mfbr_number', 'mfbr_number')
     for v in violations:
@@ -1783,10 +1836,34 @@ def gps_geojson(request):
     # CRITICAL: Fresh cache per request to avoid stale is_active status
     boat_cache = {}
     tracker_cache = {}
+    status_cache = {}  # Cache for TrackerStatusEvent lookups
 
     for gps in gps_data:
         age_seconds = int((now - gps.timestamp).total_seconds())
-        status_flag = "online" if age_seconds <= threshold_seconds else "offline"
+        
+        # Get tracker_id for status lookup
+        trk_id = getattr(gps, 'tracker_id', None)
+        
+        # Try to get status from TrackerStatusEvent first (matches tracker history)
+        status_flag = None
+        if trk_id and trk_id not in status_cache:
+            # Get the most recent status event for this tracker
+            last_status_event = TrackerStatusEvent.objects.filter(tracker_id=trk_id).order_by('-timestamp').first()
+            if last_status_event:
+                status_cache[trk_id] = last_status_event.status
+                logger.info(f"[GPS_GEOJSON] Found status event for tracker {trk_id}: {last_status_event.status}")
+            else:
+                status_cache[trk_id] = None
+                logger.info(f"[GPS_GEOJSON] No status event found for tracker {trk_id}, will use age-based fallback")
+        
+        if trk_id and status_cache.get(trk_id):
+            status_flag = status_cache[trk_id]
+            logger.info(f"[GPS_GEOJSON] Using cached status for tracker {trk_id}: {status_flag}")
+        else:
+            # Fallback to age-based status if no TrackerStatusEvent exists
+            status_flag = "online" if age_seconds <= threshold_seconds else "offline"
+            logger.info(f"[GPS_GEOJSON] Using age-based status for tracker {trk_id or 'unknown'}: {status_flag} (age: {age_seconds}s)")
+        
         mfbr = gps.mfbr_number
         
         # Check if boat is in violation (based on MFBR only to avoid ID type mismatches)
@@ -1989,7 +2066,7 @@ def ingest_positions(request):
             time_since_last = dj_tz.now() - device.last_seen_at
             if time_since_last.total_seconds() > 600:
                 connection_status = "reconnected_after_outage"
-            elif time_since_last.total_seconds() > 120:
+            elif time_since_last.total_seconds() > 90:  # Reduced from 120s: trackers posting every 60s will be stable
                 connection_status = "irregular"
     except _IngestValidationError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
@@ -2034,9 +2111,80 @@ def ingest_positions(request):
     )
     DeviceToken.objects.filter(pk=device.pk).update(last_seen_at=timezone.now())
     
+    # Record status transition using state machine
+    actual_status = 'online'  # Default for WebSocket
+    if tracker_id:
+        from .models import TrackerStatusEvent
+        
+        # Get time since last seen for debugging
+        time_since_last_str = "N/A"
+        if device.last_seen_at:
+            time_since_last = dj_tz.now() - device.last_seen_at
+            time_since_last_str = f"{time_since_last.total_seconds():.1f}s"
+        
+        # Determine current status based on connection
+        current_status = 'online'  # Default: receiving data means online
+        if connection_status == "reconnected_after_outage":
+            # Was offline (600+ seconds), now back
+            current_status = 'online'  # Will become 'reconnected' if previous was offline
+        elif connection_status == "irregular":
+            current_status = 'reconnecting'  # Intermittent signal
+        
+        logger.info(f"[STATUS_DEBUG] Tracker {tracker_id}: connection_status={connection_status}, time_since_last={time_since_last_str}, determined_status={current_status}")
+        
+        # Record the transition (state machine will handle deduplication)
+        event, created = TrackerStatusEvent.record_transition(
+            tracker_id=tracker_id,
+            new_status=current_status,
+            timestamp=gps_data.timestamp,
+            mfbr_number=mfbr,
+            boat_id=boat_id,
+            latitude=lat,
+            longitude=lng
+        )
+        
+        if created and event:
+            logger.info(f"[STATUS_DEBUG] ✅ Transition recorded: {tracker_id} → {event.status} (from {event.previous_status})")
+            actual_status = event.status  # Use the recorded status for WebSocket
+        else:
+            # No transition, check what the current status is
+            last_event = TrackerStatusEvent.objects.filter(tracker_id=tracker_id).order_by('-timestamp').first()
+            if last_event:
+                actual_status = last_event.status
+                logger.info(f"[STATUS_DEBUG] No transition (status unchanged), using last status: {actual_status}")
+            else:
+                logger.warning(f"[STATUS_DEBUG] No transition and no previous status event found for {tracker_id}")
+    
     crossing_result = None
     beep_flag = False
     beep_duration = 5
+    
+    # Check boundary crossing and violations using existing logic
+    # Your existing logic: 15-min dwell + clears if boat returns home ("just passing through")
+    if mfbr and tracker_id:
+        try:
+            from .boundary_service import check_and_notify_boundary_crossing
+            
+            logger.info(f"[BOUNDARY_CHECK] Checking crossing for {mfbr} at ({lat},{lng})")
+            crossing_result = check_and_notify_boundary_crossing(
+                boat_id=boat_id,
+                latitude=lat,
+                longitude=lng,
+                mfbr_number=mfbr,
+                tracker_id=tracker_id
+            )
+            
+            if crossing_result:
+                if crossing_result.get('crossing_detected'):
+                    logger.info(f"[BOUNDARY] ✅ Crossing detected for {mfbr}: {crossing_result.get('from_municipality')} → {crossing_result.get('to_municipality')}")
+                
+                # Check if violation alert was sent (boat dwelled 15+ mins)
+                if crossing_result.get('dwell_alert_sent'):
+                    logger.warning(f"[BOUNDARY] 🚨 VIOLATION ALERT for {mfbr}: Dwelled 15+ minutes in {crossing_result.get('to_municipality')}")
+                    beep_flag = True
+                    beep_duration = 10  # Longer beep for violation
+        except Exception as e:
+            logger.error(f"[BOUNDARY] Error checking boundary crossing for {mfbr}: {e}", exc_info=True)
     
     # Broadcast via WebSocket
     channel_layer = get_channel_layer()
@@ -2075,6 +2223,7 @@ def ingest_positions(request):
                         boat_is_active = getattr(boat, 'is_active', True)
                         registered_municipality = boat.registered_municipality
                         boat_name = str(boat.boat_name).strip() if boat.boat_name else None
+                        logger.info(f"[GPS_INGEST] Boat lookup result: MFBR={mfbr}, boat_name={boat_name}, registered_municipality={registered_municipality}, is_active={boat_is_active}")
                 except Exception as e:
                     logger.error(f"Boat lookup error for {mfbr}: {e}")
             
@@ -2112,9 +2261,10 @@ def ingest_positions(request):
             
             # CRITICAL: Skip WebSocket broadcast for deactivated boats
             if not boat_is_active:
-                logger.info(f"[GPS_INGEST] 🚫 Skipping WebSocket broadcast for deactivated boat: MFBR={mfbr}")
+                logger.warning(f"[GPS_INGEST] 🚫 Skipping WebSocket broadcast for deactivated boat: MFBR={mfbr}")
                 # Don't broadcast but GPS data is already saved for historical records
             else:
+                logger.info(f"[GPS_INGEST] ✅ Broadcasting GPS update: tracker_id={tracker_id}, MFBR={mfbr}, lat={lat}, lng={lng}, status={actual_status}")
                 # Boat is active, proceed with WebSocket broadcast
                 if not boat_name and tracker and hasattr(tracker, 'boat_name'):
                     boat_name = tracker.boat_name
@@ -2149,7 +2299,7 @@ def ingest_positions(request):
                         "latitude": lat,
                         "longitude": lng,
                         "timestamp": gps_data.timestamp.isoformat(),
-                        "status": "online",
+                        "status": actual_status,
                         "in_violation": is_in_violation,
                         "identifier_icon": identifier_icon,  # Use Municipality's icon for consistency
                     }
@@ -2165,8 +2315,9 @@ def ingest_positions(request):
                             }
                         }
                     )
+                    logger.info(f"[GPS_INGEST] 📡 WebSocket broadcast successful for {unique_boat_id}")
                 except Exception as ws_error:
-                    logger.error(f"WebSocket broadcast error: {ws_error}")
+                    logger.error(f"[GPS_INGEST] ❌ WebSocket broadcast error: {ws_error}")
     
     total_processing_time = (time.time() - start_time) * 1000
     diagnostics = {
@@ -3239,56 +3390,98 @@ def tracker_history(request, tracker_id):
         if not gps_points and ident:
             gps_points = list(GpsData.objects.filter(tracker_id=ident).order_by('-timestamp')[:200])
 
-        # 2) Status events (online / offline / reconnecting)
-        if filter_type in ['all', 'status'] and gps_points:
-            reconnect_threshold = timedelta(minutes=3)
-            offline_threshold = timedelta(minutes=10)
-            previous_status = None
-            now_ts = timezone.now()
-            for i, point in enumerate(gps_points):
-                # Determine status:
-                # - For the newest point (i == 0), compare to NOW
-                # - For historical points, compare the gap to the next older point
-                if i == 0:
-                    age = now_ts - point.timestamp
-                    if age >= offline_threshold:
-                        current_status = 'offline'
-                    elif age >= reconnect_threshold:
-                        current_status = 'reconnecting'
+        # 2) Status events from persisted TrackerStatusEvent records
+        if filter_type in ['all', 'status']:
+            from .models import TrackerStatusEvent
+            
+            # Build query for status events
+            status_q = Q(tracker_id=ident)
+            if mfbr:
+                status_q |= Q(mfbr_number=mfbr)
+            if boat_id is not None:
+                status_q |= Q(boat_id=boat_id)
+            
+            # Get persisted status events (already filtered by state machine)
+            status_events = list(TrackerStatusEvent.objects.filter(status_q).order_by('-timestamp')[:100])
+            
+            # Fallback: if no persisted events exist, compute from GPS points
+            if not status_events and gps_points:
+                reconnect_threshold = timedelta(minutes=3)
+                offline_threshold = timedelta(minutes=10)
+                previous_status = None
+                now_ts = timezone.now()
+                for i, point in enumerate(gps_points):
+                    # Determine status:
+                    # - For the newest point (i == 0), compare to NOW
+                    # - For historical points, compare the gap to the next older point
+                    if i == 0:
+                        age = now_ts - point.timestamp
+                        if age >= offline_threshold:
+                            current_status = 'offline'
+                        elif age >= reconnect_threshold:
+                            current_status = 'reconnecting'
+                        else:
+                            current_status = 'online'
                     else:
-                        current_status = 'online'
-                else:
-                    gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
-                    if gap >= offline_threshold:
-                        current_status = 'offline'
-                    elif gap >= reconnect_threshold:
-                        current_status = 'reconnecting'
-                    else:
-                        current_status = 'online'
+                        gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
+                        if gap >= offline_threshold:
+                            current_status = 'offline'
+                        elif gap >= reconnect_threshold:
+                            current_status = 'reconnecting'
+                        else:
+                            current_status = 'online'
 
-                # Emit only when the status actually changes in time sequence
-                should_emit = current_status != previous_status
-                if should_emit:
-                    event_title = {
+                    # Emit only when the status actually changes in time sequence
+                    should_emit = current_status != previous_status
+                    if should_emit:
+                        event_title = {
+                            'online': 'Tracker Online',
+                            'offline': 'Tracker Offline',
+                            'reconnecting': 'Tracker Reconnecting'
+                        }.get(current_status, 'Status Change')
+                        timeline_events.append({
+                            'id': f'status_{point.id}',
+                            'event_type': current_status,
+                            'title': event_title,
+                            'description': {
+                                'online': 'Tracker came online and started transmitting data',
+                                'offline': 'Tracker went offline (no data for 10+ minutes)',
+                                'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)'
+                            }.get(current_status, 'Status changed'),
+                            'timestamp': point.timestamp.isoformat(),
+                            'metadata': {
+                                'location': {'lat': float(point.latitude), 'lng': float(point.longitude)}
+                            }
+                        })
+                        previous_status = current_status
+            else:
+                # Use persisted events
+                for event in status_events:
+                    event_title_map = {
                         'online': 'Tracker Online',
                         'offline': 'Tracker Offline',
-                        'reconnecting': 'Tracker Reconnecting'
-                    }.get(current_status, 'Status Change')
+                        'reconnecting': 'Tracker Reconnecting',
+                        'reconnected': 'Tracker Reconnected'
+                    }
+                    event_desc_map = {
+                        'online': 'Tracker came online and started transmitting data',
+                        'offline': 'Tracker went offline (no data for 10+ minutes)',
+                        'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)',
+                        'reconnected': 'Tracker reconnected successfully after being offline'
+                    }
+                    
                     timeline_events.append({
-                        'id': f'status_{point.id}',
-                        'event_type': current_status,
-                        'title': event_title,
-                        'description': {
-                            'online': 'Tracker came online and started transmitting data',
-                            'offline': 'Tracker went offline (no data for 10+ minutes)',
-                            'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)'
-                        }.get(current_status, 'Status changed'),
-                        'timestamp': point.timestamp.isoformat(),
+                        'id': f'status_{event.id}',
+                        'event_type': event.status,
+                        'title': event_title_map.get(event.status, 'Status Change'),
+                        'description': event_desc_map.get(event.status, 'Status changed'),
+                        'timestamp': event.timestamp.isoformat(),
                         'metadata': {
-                            'location': {'lat': float(point.latitude), 'lng': float(point.longitude)}
+                            'location': {'lat': float(event.latitude) if event.latitude else None, 'lng': float(event.longitude) if event.longitude else None},
+                            'session_start': event.session_start.isoformat() if event.session_start else None,
+                            'previous_status': event.previous_status
                         }
                     })
-                    previous_status = current_status
 
         # 3) Boundary crossings
         if filter_type in ['all', 'movements']:
@@ -3378,24 +3571,6 @@ def tracker_history(request, tracker_id):
                             'severity': 'high' if duration_mins > 60 else 'medium'
                         }
                     })
-
-        # 5) Idle state
-        if filter_type in ['all', 'movements']:
-            try:
-                device_token = DeviceToken.objects.filter(
-                    Q(tracker__BirukBilugID=ident) | Q(name=ident) | Q(boat_id=boat_id if boat_id is not None else -1)
-                ).first()
-                if device_token and device_token.is_idle:
-                    timeline_events.append({
-                        'id': f'idle_{device_token.id}',
-                        'event_type': 'idle',
-                        'title': 'Boat Idle/Anchored',
-                        'description': 'Boat has been stationary for 15+ minutes',
-                        'timestamp': (datetime.now() - timedelta(minutes=15)).isoformat(),
-                        'metadata': {}
-                    })
-            except Exception as e:
-                logger.warning(f"Error checking idle state: {e}")
 
         # Sort timeline by timestamp (newest first) using robust, TZ-safe parsing
         from django.utils.dateparse import parse_datetime
