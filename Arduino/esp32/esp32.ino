@@ -12,6 +12,14 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>  // For parsing boundary JSON from backend
+
+// ====== TYPE DEFINITIONS ======
+// Geofence point structure (must be defined before use)
+struct GeoPoint {
+  double lat;
+  double lon;
+};
 
 // ====== CONFIGURE THESE ======
 static const int MODEM_RX_PIN = 16;   // SIM808 TX -> ESP32 RX
@@ -202,10 +210,16 @@ static bool     g_outside_state       = false;  // true if currently outside pol
 static uint32_t g_boundary_exit_time  = 0;      // Unix time when idle-outside period started
 static bool     g_violation_triggered = false;  // avoid repeated local alerts
 static uint32_t g_last_gps_unix       = 0;      // last known GPS Unix time (seconds)
+static uint32_t g_violation_timestamp = 0;      // Unix time when last violation was triggered
 
 static float    g_idle_base_lat       = 0.0f;   // reference point for idle-distance measurement
 static float    g_idle_base_lng       = 0.0f;
 static bool     g_has_idle_base       = false;
+
+// Dynamic geofence boundary (loaded from backend during provisioning)
+static GeoPoint* g_geofence_polygon = nullptr;  // Dynamic array allocated from NVS
+static size_t    g_geofence_vertices = 0;       // Number of vertices in polygon
+static const size_t MAX_GEOFENCE_VERTICES = 50; // Maximum vertices supported
 
 struct TrackerConfig {
   String device_id;  // unique device identifier 
@@ -448,9 +462,23 @@ static bool cfg_set_kv(const String &key, const String &val) {
       g_credentials_changed = true;
       
       if (cfg_save()) {
-        Serial.println("[PROV] Credentials stored successfully!");
+        Serial.println("[PROV] ✅ Credentials stored successfully!");
         g_provisioning_in_progress = false;
         g_provisioned = true;
+        
+        // Fetch geofence boundary from backend
+        Serial.println("[PROV] Fetching geofence boundary from backend...");
+        if (geofence_fetch_from_backend()) {
+          Serial.println("[PROV] ✅ Provisioning complete with boundary!");
+          lcd_show("Provisioned!", "Boundary OK");
+        } else {
+          Serial.println("[PROV] ⚠ WARNING: Boundary fetch failed");
+          Serial.println("[PROV] Device is provisioned but geofence is not configured");
+          Serial.println("[PROV] You can re-run PROVISION to retry boundary fetch");
+          lcd_show("Provisioned", "No Boundary");
+        }
+        
+        delay(2000);
         return true;
       } else {
         Serial.println("[PROV] ERROR: Failed to store credentials!");
@@ -482,13 +510,22 @@ static bool cfg_set_kv(const String &key, const String &val) {
     prefs.begin(TRACKER_PREF_NAMESPACE, false);
     prefs.clear(); 
     prefs.end();
+    
+    // Clear geofence polygon from memory and NVS
+    if (g_geofence_polygon) {
+      free(g_geofence_polygon);
+      g_geofence_polygon = nullptr;
+    }
+    g_geofence_vertices = 0;
+    geoPrefs.clear();  // Clear all geofence data (polygon, state, etc.)
+    
     g_cfg.device_id = ""; g_cfg.host = ""; g_cfg.port = 0; g_cfg.path = ""; g_cfg.token = "";
     g_cfg.provisioned = false;
     g_cfg.crc = 0;
     g_provisioned = false;
     g_credentials_changed = false;
     g_provisioning_in_progress = false;
-    Serial.println("[PROV] Configuration erased. Send DEVICE_ID and TOKEN to provision.");
+    Serial.println("[PROV] Configuration and geofence erased. Send DEVICE_ID and TOKEN to provision.");
     if (lcdReady) lcd_show("Provision", "Needed");
     return true;
   } else {
@@ -1229,19 +1266,7 @@ static bool parse_cgnsinf_time(const String &resp, uint32_t &unixTimeOut) {
 
 // ======= POLYGON GEOFENCE + MOVEMENT-AWARE IDLE DETECTION =======
 
-struct GeoPoint {
-  double lat;
-  double lon;
-};
-
-// Example polygon (replace with your real fishing ground boundary)
-static const GeoPoint GEOFENCE_POLYGON[] = {
-  {14.5920, 120.9735},
-  {14.5920, 120.9835},
-  {14.6020, 120.9835},
-  {14.6020, 120.9735}
-};
-static const size_t GEOFENCE_VERTICES = sizeof(GEOFENCE_POLYGON) / sizeof(GEOFENCE_POLYGON[0]);
+// Dynamic geofence boundary variables declared at top of file (lines 218-221)
 
 static double deg2rad(double deg) {
   return deg * 3.14159265358979323846 / 180.0;
@@ -1262,9 +1287,169 @@ static double haversine_meters(double lat1, double lon1,
   return R * c;
 }
 
+// Save dynamic polygon to NVS
+static void geofence_save_polygon() {
+  if (!g_geofence_polygon || g_geofence_vertices == 0) {
+    Serial.println("[GEOFENCE] No polygon to save");
+    return;
+  }
+  
+  geoPrefs.putUInt("poly_verts", g_geofence_vertices);
+  
+  for (size_t i = 0; i < g_geofence_vertices; i++) {
+    char lat_key[16], lng_key[16];
+    snprintf(lat_key, sizeof(lat_key), "poly_lat_%u", (unsigned)i);
+    snprintf(lng_key, sizeof(lng_key), "poly_lng_%u", (unsigned)i);
+    geoPrefs.putDouble(lat_key, g_geofence_polygon[i].lat);
+    geoPrefs.putDouble(lng_key, g_geofence_polygon[i].lon);
+  }
+  
+  Serial.printf("[GEOFENCE] Saved polygon: %u vertices\n", (unsigned)g_geofence_vertices);
+}
+
+// Load dynamic polygon from NVS
+static bool geofence_load_polygon() {
+  g_geofence_vertices = geoPrefs.getUInt("poly_verts", 0);
+  
+  if (g_geofence_vertices == 0 || g_geofence_vertices > MAX_GEOFENCE_VERTICES) {
+    Serial.printf("[GEOFENCE] No valid polygon in NVS (vertices=%u)\n", (unsigned)g_geofence_vertices);
+    g_geofence_vertices = 0;
+    return false;
+  }
+  
+  // Allocate memory for polygon
+  if (g_geofence_polygon) {
+    free(g_geofence_polygon);
+  }
+  g_geofence_polygon = (GeoPoint*)malloc(g_geofence_vertices * sizeof(GeoPoint));
+  
+  if (!g_geofence_polygon) {
+    Serial.println("[GEOFENCE] ERROR: Failed to allocate polygon memory");
+    g_geofence_vertices = 0;
+    return false;
+  }
+  
+  // Load points
+  for (size_t i = 0; i < g_geofence_vertices; i++) {
+    char lat_key[16], lng_key[16];
+    snprintf(lat_key, sizeof(lat_key), "poly_lat_%u", (unsigned)i);
+    snprintf(lng_key, sizeof(lng_key), "poly_lng_%u", (unsigned)i);
+    g_geofence_polygon[i].lat = geoPrefs.getDouble(lat_key, 0.0);
+    g_geofence_polygon[i].lon = geoPrefs.getDouble(lng_key, 0.0);
+  }
+  
+  Serial.printf("[GEOFENCE] Loaded polygon: %u vertices from NVS\n", (unsigned)g_geofence_vertices);
+  return true;
+}
+
+// Fetch geofence boundary from backend during provisioning
+static bool geofence_fetch_from_backend() {
+  if (g_cfg.device_id.length() == 0) {
+    Serial.println("[GEOFENCE] ERROR: No device_id configured");
+    return false;
+  }
+  
+  Serial.println("[GEOFENCE] Fetching boundary from backend...");
+  lcd_show("Provisioning", "Fetch Boundary");
+  
+  // Ensure we're in command mode
+  ensure_command_mode();
+  
+  // Ensure PPP connection
+  if (!PPPOS_isConnected()) {
+    Serial.println("[GEOFENCE] Connecting PPP for boundary fetch...");
+    if (!modem_dial() || !ppp_connect_blocking(PPP_CONNECT_TIMEOUT_MS)) {
+      Serial.println("[GEOFENCE] ERROR: PPP connection failed");
+      return false;
+    }
+  }
+  
+  // Build HTTP GET request
+  String path = "/api/device-boundary/" + g_cfg.device_id + "/";
+  
+  HttpClient http(pppClient, g_cfg.host.c_str(), g_cfg.port);
+  http.setTimeout(15000);  // 15 second timeout
+  
+  Serial.printf("[GEOFENCE] GET http://%s:%d%s\n", g_cfg.host.c_str(), g_cfg.port, path.c_str());
+  
+  int err = http.get(path.c_str());
+  if (err != 0) {
+    Serial.printf("[GEOFENCE] HTTP GET error: %d\n", err);
+    return false;
+  }
+  
+  int statusCode = http.responseStatusCode();
+  Serial.printf("[GEOFENCE] HTTP Status: %d\n", statusCode);
+  
+  if (statusCode != 200) {
+    Serial.println("[GEOFENCE] ERROR: Server returned non-200 status");
+    String response = http.responseBody();
+    Serial.println(response);
+    return false;
+  }
+  
+  String response = http.responseBody();
+  Serial.printf("[GEOFENCE] Response length: %d bytes\n", response.length());
+  
+  // Parse JSON response
+  DynamicJsonDocument doc(8192);  // 8KB for boundary JSON
+  DeserializationError error = deserializeJson(doc, response);
+  
+  if (error) {
+    Serial.printf("[GEOFENCE] JSON parse error: %s\n", error.c_str());
+    return false;
+  }
+  
+  // Extract polygon array
+  if (!doc.containsKey("geofence") || !doc["geofence"].containsKey("polygon")) {
+    Serial.println("[GEOFENCE] ERROR: Response missing geofence.polygon");
+    return false;
+  }
+  
+  JsonArray polygon = doc["geofence"]["polygon"];
+  size_t vertices = polygon.size();
+  
+  if (vertices == 0 || vertices > MAX_GEOFENCE_VERTICES) {
+    Serial.printf("[GEOFENCE] ERROR: Invalid vertex count: %u\n", (unsigned)vertices);
+    return false;
+  }
+  
+  // Allocate new polygon
+  if (g_geofence_polygon) {
+    free(g_geofence_polygon);
+  }
+  g_geofence_polygon = (GeoPoint*)malloc(vertices * sizeof(GeoPoint));
+  
+  if (!g_geofence_polygon) {
+    Serial.println("[GEOFENCE] ERROR: Failed to allocate memory");
+    g_geofence_vertices = 0;
+    return false;
+  }
+  
+  // Parse polygon points [lat, lng]
+  g_geofence_vertices = vertices;
+  for (size_t i = 0; i < vertices; i++) {
+    JsonArray point = polygon[i];
+    g_geofence_polygon[i].lat = point[0].as<double>();
+    g_geofence_polygon[i].lon = point[1].as<double>();
+  }
+  
+  // Print info
+  String municipality = doc["municipality"]["name"] | "Unknown";
+  Serial.printf("[GEOFENCE] ✅ Loaded %s boundary: %u vertices\n", 
+                municipality.c_str(), (unsigned)g_geofence_vertices);
+  
+  // Save to NVS
+  geofence_save_polygon();
+  
+  lcd_show("Boundary OK", municipality.c_str());
+  delay(2000);
+  
+  return true;
+}
+
 // Ray-casting point-in-polygon
-static bool pointInPolygon(double lat, double lon,
-                           const GeoPoint* polygon, size_t vertexCount) {
+static bool pointInPolygon(double lat, double lon, const GeoPoint* polygon, size_t vertexCount) {
   bool inside = false;
 
   for (size_t i = 0, j = vertexCount - 1; i < vertexCount; j = i++) {
@@ -1291,10 +1476,14 @@ static void geofence_save_state() {
   geoPrefs.putFloat("lastLng", g_idle_base_lng);
   geoPrefs.putBool("hasLast", g_has_idle_base);
   geoPrefs.putULong("lastUnix", g_last_gps_unix);
-  Serial.printf("[GEOFENCE] Saved: outside=%d idleStart=%u hasLast=%d lat=%.6f lon=%.6f\n",
+  geoPrefs.putBool("violated", g_violation_triggered);  // CRITICAL: Save violation flag
+  geoPrefs.putULong("violTime", g_violation_timestamp); // Save violation timestamp for 24hr cooldown
+  Serial.printf("[GEOFENCE] Saved: outside=%d idleStart=%u hasLast=%d violated=%d violTime=%u lat=%.6f lon=%.6f\n",
                 g_outside_state,
                 (unsigned)g_boundary_exit_time,
                 g_has_idle_base,
+                g_violation_triggered,
+                (unsigned)g_violation_timestamp,
                 (double)g_idle_base_lat,
                 (double)g_idle_base_lng);
 }
@@ -1306,12 +1495,15 @@ static void geofence_load_state() {
   g_idle_base_lng      = geoPrefs.getFloat("lastLng", 0.0f);
   g_has_idle_base      = geoPrefs.getBool("hasLast", false);
   g_last_gps_unix      = geoPrefs.getULong("lastUnix", 0);
-  g_violation_triggered = false;  // re-arm on boot; we may re-alert if still in violation
+  g_violation_triggered = geoPrefs.getBool("violated", false);  // CRITICAL: Load violation flag from NVS
+  g_violation_timestamp = geoPrefs.getULong("violTime", 0);    // Load violation timestamp
 
-  Serial.printf("[GEOFENCE] Loaded: outside=%d idleStart=%u hasLast=%d lat=%.6f lon=%.6f lastUnix=%u\n",
+  Serial.printf("[GEOFENCE] Loaded: outside=%d idleStart=%u hasLast=%d violated=%d violTime=%u lat=%.6f lon=%.6f lastUnix=%u\n",
                 g_outside_state,
                 (unsigned)g_boundary_exit_time,
                 g_has_idle_base,
+                g_violation_triggered,
+                (unsigned)g_violation_timestamp,
                 (double)g_idle_base_lat,
                 (double)g_idle_base_lng,
                 (unsigned)g_last_gps_unix);
@@ -1319,9 +1511,24 @@ static void geofence_load_state() {
 
 // Local violation handler (device-side; independent of backend)
 static void geofence_trigger_violation(uint32_t nowUnix, double lat, double lon) {
-  if (g_violation_triggered) return;  // only once per idle excursion
+  // Check if violation was triggered in the last 24 hours (86400 seconds)
+  const uint32_t VIOLATION_COOLDOWN_SECONDS = 24UL * 60UL * 60UL; // 24 hours
+  
+  if (g_violation_triggered && g_violation_timestamp > 0) {
+    uint32_t time_since_violation = nowUnix - g_violation_timestamp;
+    if (time_since_violation < VIOLATION_COOLDOWN_SECONDS) {
+      uint32_t hours_remaining = (VIOLATION_COOLDOWN_SECONDS - time_since_violation) / 3600;
+      Serial.printf("[GEOFENCE] Violation already triggered today, cooldown: %u hours remaining\n", 
+                    (unsigned)hours_remaining);
+      return;  // only once per 24 hours
+    } else {
+      Serial.println("[GEOFENCE] 24-hour cooldown expired, allowing new violation");
+    }
+  }
 
   g_violation_triggered = true;
+  g_violation_timestamp = nowUnix;  // Record when violation was triggered
+  geofence_save_state();  // CRITICAL: Save violation flag and timestamp immediately to NVS
 
   Serial.println("***** GEOFENCE VIOLATION (MOVEMENT-IDLE) *****");
   Serial.printf("time=%u lat=%.6f lon=%.6f\n", (unsigned)nowUnix, lat, lon);
@@ -1340,8 +1547,14 @@ static void geofence_process(double lat, double lon, uint32_t nowUnix) {
     Serial.println("[GEOFENCE] GPS time not available; skipping.");
     return;
   }
+  
+  // Check if polygon is loaded
+  if (!g_geofence_polygon || g_geofence_vertices == 0) {
+    // No polygon configured - skip geofence checks
+    return;
+  }
 
-  bool inside = pointInPolygon(lat, lon, GEOFENCE_POLYGON, GEOFENCE_VERTICES);
+  bool inside = pointInPolygon(lat, lon, g_geofence_polygon, g_geofence_vertices);
 
   if (inside) {
     if (g_outside_state || g_boundary_exit_time != 0 || g_has_idle_base) {
@@ -1427,6 +1640,11 @@ void setup() {
   // Open geofence NVS namespace and load persistent geofence/idle state
   if (geoPrefs.begin("geofence", false)) {  // read-write
     geofence_load_state();
+    // Load dynamic polygon from NVS (fetched during provisioning)
+    if (!geofence_load_polygon()) {
+      Serial.println("[GEOFENCE] WARNING: No boundary polygon configured");
+      Serial.println("[GEOFENCE] Run PROVISION command to fetch boundary from backend");
+    }
   } else {
     Serial.println("[GEOFENCE] ERROR: Failed to open NVS namespace 'geofence'");
   }

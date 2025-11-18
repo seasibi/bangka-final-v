@@ -1484,6 +1484,14 @@ class BirukbilugTrackerViewSet(viewsets.ModelViewSet):
     def _prefix_for(self, municipality: str) -> str:
         if not municipality:
             return "XXX"
+        try:
+            from .models import Municipality
+            muni_obj = Municipality.objects.filter(name__iexact=municipality).first()
+            if muni_obj and muni_obj.prefix:
+                return muni_obj.prefix
+        except Exception:
+            pass
+        # Fallback to hardcoded dict or first 3 letters
         return self.MUNI_PREFIX.get(municipality, municipality[:3].upper())
 
     def _next_sequence_for_prefix(self, prefix: str) -> int:
@@ -1512,10 +1520,20 @@ class BirukbilugTrackerViewSet(viewsets.ModelViewSet):
         if not municipality:
             return Response({"municipality": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Enforce coastal municipalities only
-        if municipality not in self.ALLOWED_MUNICIPALITIES:
+        # Enforce coastal municipalities only - dynamically check from Municipality model
+        try:
+            from .models import Municipality
+            muni_obj = Municipality.objects.filter(name__iexact=municipality, is_coastal=True, is_active=True).first()
+            if not muni_obj:
+                return Response(
+                    {"municipality": ["Only coastal municipalities are allowed for tracker registration."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # Use the exact name from database to ensure consistency
+            municipality = muni_obj.name
+        except Exception as e:
             return Response(
-                {"municipality": ["Only coastal municipalities are allowed for tracker registration."]},
+                {"municipality": [f"Error validating municipality: {str(e)}"]},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -1781,11 +1799,11 @@ def _muni_color(name: str) -> str:
 def gps_geojson(request):
     features = []
 
-    # Threshold in minutes to consider a device offline (default 3 minutes)
+    # Threshold in minutes to consider a device offline (changed to 8 minutes)
     try:
-        threshold_min = int(request.GET.get("threshold", 5))
+        threshold_min = int(request.GET.get("threshold", 8))
     except Exception:
-        threshold_min = 5
+        threshold_min = 8
     threshold_seconds = threshold_min * 60
     now = timezone.now()
 
@@ -3419,8 +3437,8 @@ def tracker_history(request, tracker_id):
             
             # Fallback: if no persisted events exist, compute from GPS points
             if not status_events and gps_points:
-                reconnect_threshold = timedelta(minutes=3)
-                offline_threshold = timedelta(minutes=10)
+                reconnect_threshold = timedelta(minutes=5)
+                offline_threshold = timedelta(minutes=8)
                 previous_status = None
                 now_ts = timezone.now()
                 for i, point in enumerate(gps_points):
@@ -3458,8 +3476,8 @@ def tracker_history(request, tracker_id):
                             'title': event_title,
                             'description': {
                                 'online': 'Tracker came online and started transmitting data',
-                                'offline': 'Tracker went offline (no data for 10+ minutes)',
-                                'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)'
+                                'offline': 'Tracker went offline (no data for 8+ minutes)',
+                                'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 5+ minutes)'
                             }.get(current_status, 'Status changed'),
                             'timestamp': point.timestamp.isoformat(),
                             'metadata': {
@@ -3478,8 +3496,8 @@ def tracker_history(request, tracker_id):
                     }
                     event_desc_map = {
                         'online': 'Tracker came online and started transmitting data',
-                        'offline': 'Tracker went offline (no data for 10+ minutes)',
-                        'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 3+ minutes)',
+                        'offline': 'Tracker went offline (no data for 8+ minutes)',
+                        'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 5+ minutes)',
                         'reconnected': 'Tracker reconnected successfully after being offline'
                     }
                     
@@ -3500,7 +3518,7 @@ def tracker_history(request, tracker_id):
                 # longer than the offline threshold, to avoid a tracker appearing
                 # permanently reconnecting/online with no recent data.
                 try:
-                    offline_threshold = timedelta(minutes=10)
+                    offline_threshold = timedelta(minutes=8)
                     from django.utils import timezone as dj_tz
 
                     last_status_event = status_events[0] if status_events else None
@@ -3530,7 +3548,7 @@ def tracker_history(request, tracker_id):
                                 'id': f'status_offline_synth_{ident}',
                                 'event_type': 'offline',
                                 'title': 'Tracker Offline',
-                                'description': 'Tracker went offline (no data for 10+ minutes)',
+                                'description': 'Tracker went offline (no data for 8 minutes)',
                                 'timestamp': (last_activity_ts + offline_threshold).isoformat(),
                                 'metadata': {
                                     'location': {'lat': last_lat, 'lng': last_lng} if last_lat is not None and last_lng is not None else None,
@@ -3660,6 +3678,170 @@ def tracker_history(request, tracker_id):
     except Exception as e:
         logger.error(f"tracker_history failed: {e}")
         return Response({'error': 'Internal error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_device_boundary(request, device_id):
+    """
+    Provide geofence boundary data for ESP32 devices.
+    Returns the municipal boundary coordinates for the device's registered municipality.
+    
+    Response format expected by ESP32:
+    {
+      "status": "ok",
+      "device_id": "SJU-0001",
+      "boat": {...},
+      "municipality": {
+        "name": "San Juan",
+        "water_area_km2": 83.76,
+        "coastline_km": 6.44
+      },
+      "geofence": {
+        "vertices": 5,
+        "polygon": [[lat, lng], [lat, lng], ...]
+      }
+    }
+    """
+    try:
+        from .models import BirukbilugTracker, MunicipalityBoundary, LandBoundary, Boat, Municipality
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"[BOUNDARY] Device {device_id} requesting boundary data")
+        
+        # Find tracker by device_id
+        tracker = BirukbilugTracker.objects.filter(BirukBilugID=device_id).first()
+        if not tracker:
+            logger.error(f"[BOUNDARY] Device {device_id} not found in database")
+            return Response({'error': f'Device {device_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get municipality from tracker
+        if not tracker.municipality:
+            logger.error(f"[BOUNDARY] Device {device_id} has no municipality assigned")
+            return Response({'error': 'No municipality assigned to device'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        municipality_name = tracker.municipality
+        logger.info(f"[BOUNDARY] Device {device_id} is registered to {municipality_name}")
+        
+        # Get boat info if assigned
+        boat_info = None
+        if tracker.boat:
+            boat_info = {
+                'mfbr_number': tracker.boat.mfbr_number,
+                'name': tracker.boat.boat_name,
+                'registered_municipality': tracker.boat.registered_municipality
+            }
+        
+        # Try to find boundary (prefer water boundary, fallback to land boundary)
+        boundary = None
+        boundary_type = None
+        
+        # First try MunicipalityBoundary (water boundary)
+        water_boundary = MunicipalityBoundary.objects.filter(name__iexact=municipality_name).first()
+        if not water_boundary:
+            # Try matching via Municipality FK
+            muni_obj = Municipality.objects.filter(name__iexact=municipality_name).first()
+            if muni_obj:
+                water_boundary = MunicipalityBoundary.objects.filter(municipality=muni_obj).first()
+        
+        if water_boundary and water_boundary.coordinates:
+            boundary = water_boundary
+            boundary_type = 'water'
+            logger.info(f"[BOUNDARY] Found water boundary for {municipality_name}")
+        else:
+            # Fallback to LandBoundary
+            land_boundary = LandBoundary.objects.filter(name__iexact=municipality_name).first()
+            if not land_boundary:
+                # Try matching via Municipality FK
+                muni_obj = Municipality.objects.filter(name__iexact=municipality_name).first()
+                if muni_obj:
+                    land_boundary = LandBoundary.objects.filter(municipality=muni_obj).first()
+            
+            if land_boundary and land_boundary.coordinates:
+                boundary = land_boundary
+                boundary_type = 'land'
+                logger.info(f"[BOUNDARY] Found land boundary for {municipality_name}")
+        
+        if not boundary:
+            logger.error(f"[BOUNDARY] No boundary data found for {municipality_name}")
+            return Response({
+                'error': f'No boundary polygon found for {municipality_name}',
+                'device_id': device_id,
+                'municipality': municipality_name,
+                'hint': 'Add boundary data via admin panel'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Parse coordinates - handle different GeoJSON formats
+        coords = boundary.coordinates
+        polygon = []
+        
+        if isinstance(coords, dict):
+            # GeoJSON format: {"type": "Polygon", "coordinates": [[[lng, lat], ...]]}
+            if coords.get('type') == 'Polygon' and 'coordinates' in coords:
+                # Extract outer ring (first element)
+                outer_ring = coords['coordinates'][0] if coords['coordinates'] else []
+                # Convert [lng, lat] to [lat, lng] for ESP32
+                polygon = [[pt[1], pt[0]] for pt in outer_ring]
+            elif 'coordinates' in coords:
+                # Simplified format: {"coordinates": [[lng, lat], ...]}
+                polygon = [[pt[1], pt[0]] for pt in coords['coordinates']]
+        elif isinstance(coords, list):
+            # Direct array format: [[lng, lat], ...] or [[lat, lng], ...]
+            if coords and len(coords) > 0:
+                # Auto-detect format based on typical coordinate ranges
+                # Lat: -90 to 90, Lng: -180 to 180
+                # Philippines: Lat ~5-21, Lng ~116-127
+                first_pt = coords[0]
+                if len(first_pt) >= 2:
+                    if abs(first_pt[0]) > 90:
+                        # First value > 90, likely [lng, lat] format
+                        polygon = [[pt[1], pt[0]] for pt in coords]
+                    else:
+                        # Likely [lat, lng] format already
+                        polygon = coords
+        
+        if not polygon or len(polygon) < 3:
+            logger.error(f"[BOUNDARY] Invalid polygon data for {municipality_name}")
+            return Response({
+                'error': f'Invalid polygon data for {municipality_name}',
+                'device_id': device_id,
+                'municipality': municipality_name
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Get municipality details
+        muni_obj = Municipality.objects.filter(name__iexact=municipality_name).first()
+        muni_data = {
+            'name': municipality_name,
+            'water_area_km2': float(boundary.water_area if boundary_type == 'water' and hasattr(boundary, 'water_area') else 0),
+            'coastline_km': float(boundary.coastline_length if boundary_type == 'water' and hasattr(boundary, 'coastline_length') else 0),
+            'is_coastal': muni_obj.is_coastal if muni_obj else False
+        }
+        
+        # Build ESP32-compatible response
+        response_data = {
+            'status': 'ok',
+            'device_id': device_id,
+            'municipality': muni_data,
+            'geofence': {
+                'vertices': len(polygon),
+                'polygon': polygon,
+                'type': boundary_type
+            },
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        if boat_info:
+            response_data['boat'] = boat_info
+        
+        logger.info(f"[BOUNDARY] Successfully returning {len(polygon)} vertices for {municipality_name}")
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"[BOUNDARY] get_device_boundary failed for {device_id}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return Response({'error': f'Internal error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
