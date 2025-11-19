@@ -466,17 +466,11 @@ static bool cfg_set_kv(const String &key, const String &val) {
         g_provisioning_in_progress = false;
         g_provisioned = true;
         
-        // Fetch geofence boundary from backend
-        Serial.println("[PROV] Fetching geofence boundary from backend...");
-        if (geofence_fetch_from_backend()) {
-          Serial.println("[PROV] ✅ Provisioning complete with boundary!");
-          lcd_show("Provisioned!", "Boundary OK");
-        } else {
-          Serial.println("[PROV] ⚠ WARNING: Boundary fetch failed");
-          Serial.println("[PROV] Device is provisioned but geofence is not configured");
-          Serial.println("[PROV] You can re-run PROVISION to retry boundary fetch");
-          lcd_show("Provisioned", "No Boundary");
-        }
+        // Note: Boundary fetch will happen automatically after modem is initialized
+        Serial.println("[PROV] ✅ Provisioning complete!");
+        Serial.println("[PROV] Boundary will be fetched after modem initializes...");
+        Serial.println("[PROV] OR send 'FETCH_BOUNDARY' command manually after device boots");
+        lcd_show("Provisioned!", "Reboot to fetch");
         
         delay(2000);
         return true;
@@ -504,6 +498,24 @@ static bool cfg_set_kv(const String &key, const String &val) {
       }
     } else {
       Serial.println("[PROV] ERROR: Not provisioned, cannot verify");
+      return false;
+    }
+  } else if (K == "FETCH_BOUNDARY" || K == "FETCH") {
+    // Manual command to fetch boundary (after modem is ready)
+    if (!g_provisioned) {
+      Serial.println("[FETCH] ERROR: Device not provisioned. Run PROVISION first.");
+      return false;
+    }
+    
+    Serial.println("[FETCH] Fetching geofence boundary from backend...");
+    if (geofence_fetch_from_backend()) {
+      Serial.println("[FETCH] ✅ Boundary fetch successful!");
+      lcd_show("Boundary", "Loaded!");
+      return true;
+    } else {
+      Serial.println("[FETCH] ❌ Boundary fetch failed");
+      Serial.println("[FETCH] Check: Modem power, PPP connection, network");
+      lcd_show("Boundary", "Fetch Failed");
       return false;
     }
   } else if (K == "ERASE" || K == "RESET") {
@@ -1353,8 +1365,6 @@ static bool geofence_fetch_from_backend() {
   lcd_show("Provisioning", "Fetch Boundary");
   
   // Ensure we're in command mode
-  ensure_command_mode();
-  
   // Ensure PPP connection
   if (!PPPOS_isConnected()) {
     Serial.println("[GEOFENCE] Connecting PPP for boundary fetch...");
@@ -1367,29 +1377,134 @@ static bool geofence_fetch_from_backend() {
   // Build HTTP GET request
   String path = "/api/device-boundary/" + g_cfg.device_id + "/";
   
-  HttpClient http(pppClient, g_cfg.host.c_str(), g_cfg.port);
-  http.setTimeout(15000);  // 15 second timeout
-  
   Serial.printf("[GEOFENCE] GET http://%s:%d%s\n", g_cfg.host.c_str(), g_cfg.port, path.c_str());
   
-  int err = http.get(path.c_str());
+  // Retry up to 3 times with increasing timeout
+  int statusCode = 0;
+  int err = -1;
+  String response = "";
+  
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    uint32_t timeout = 15000 + (attempt * 5000); // 20s, 25s, 30s
+    
+    Serial.printf("[GEOFENCE] Attempt %d/3 (timeout=%dms)\n", attempt, timeout);
+    
+    // Create raw HTTP request with ngrok headers
+    if (!pppClient.connect(g_cfg.host.c_str(), g_cfg.port)) {
+      Serial.println("[GEOFENCE] ERROR: Connection failed");
+      err = -1;
+      if (attempt < 3) {
+        Serial.println("[GEOFENCE] Retrying...");
+        delay(2000);
+      }
+      continue;
+    }
+    
+    Serial.println("[GEOFENCE] Connected to server, sending request...");
+    
+    // Send HTTP GET request with headers
+    pppClient.printf("GET %s HTTP/1.1\r\n", path.c_str());
+    pppClient.printf("Host: %s\r\n", g_cfg.host.c_str());
+    pppClient.println("User-Agent: ESP32-Tracker/1.0");
+    pppClient.println("ngrok-skip-browser-warning: true");
+    pppClient.println("Connection: close");
+    pppClient.println();
+    
+    Serial.println("[GEOFENCE] Request sent, waiting for response...");
+    
+    // Wait for response with timeout
+    unsigned long start = millis();
+    while (!pppClient.available() && (millis() - start < timeout)) {
+      delay(10);
+    }
+    
+    if (!pppClient.available()) {
+      Serial.println("[GEOFENCE] ERROR: Response timeout");
+      pppClient.stop();
+      err = -1;
+      if (attempt < 3) {
+        Serial.println("[GEOFENCE] Retrying...");
+        delay(2000);
+      }
+      continue;
+    }
+    
+    // Read status line
+    String statusLine = pppClient.readStringUntil('\n');
+    statusLine.trim();
+    Serial.printf("[GEOFENCE] Status: %s\n", statusLine.c_str());
+    
+    // Extract status code
+    if (statusLine.startsWith("HTTP/1.")) {
+      int firstSpace = statusLine.indexOf(' ');
+      int secondSpace = statusLine.indexOf(' ', firstSpace + 1);
+      if (firstSpace > 0 && secondSpace > firstSpace) {
+        statusCode = statusLine.substring(firstSpace + 1, secondSpace).toInt();
+        Serial.printf("[GEOFENCE] HTTP Status: %d\n", statusCode);
+      }
+    }
+    
+    // Skip headers
+    while (pppClient.available()) {
+      String line = pppClient.readStringUntil('\n');
+      line.trim();
+      if (line.length() == 0) break; // Empty line = end of headers
+    }
+    
+    // Read body with timeout loop to allow JSON to arrive fully
+    response = "";
+    unsigned long bodyStart = millis();
+    while (millis() - bodyStart < timeout) {
+      // Drain any available bytes into the response buffer
+      while (pppClient.available()) {
+        int c = pppClient.read();
+        if (c < 0) break;
+        response += (char)c;
+      }
+      // If the server closed the connection and we already have data, stop
+      if (!pppClient.connected() && response.length() > 0) {
+        break;
+      }
+      // If we already have some data and no more is arriving, a short
+      // idle wait is enough before we stop (avoid burning CPU)
+      delay(10);
+    }
+
+    pppClient.stop();
+    
+    if (statusCode == 200 && response.length() > 0) {
+      err = 0;
+      break; // Success!
+    } else {
+      err = statusCode > 0 ? statusCode : -1;
+    }
+    
+    if (attempt < 3) {
+      Serial.println("[GEOFENCE] Retrying...");
+      delay(2000);
+    }
+  }
+  
   if (err != 0) {
-    Serial.printf("[GEOFENCE] HTTP GET error: %d\n", err);
+    Serial.printf("[GEOFENCE] All attempts failed. Last error: %d\n", err);
+    Serial.println("[GEOFENCE] Check: Network connection, server URL, firewall");
     return false;
   }
   
-  int statusCode = http.responseStatusCode();
-  Serial.printf("[GEOFENCE] HTTP Status: %d\n", statusCode);
-  
+  // Check status code
   if (statusCode != 200) {
     Serial.println("[GEOFENCE] ERROR: Server returned non-200 status");
-    String response = http.responseBody();
     Serial.println(response);
     return false;
   }
   
-  String response = http.responseBody();
   Serial.printf("[GEOFENCE] Response length: %d bytes\n", response.length());
+  
+  // Debug: print first 200 chars of response
+  if (response.length() > 0) {
+    String preview = response.substring(0, min((int)response.length(), 200));
+    Serial.printf("[GEOFENCE] Response preview: %s...\n", preview.c_str());
+  }
   
   // Parse JSON response
   DynamicJsonDocument doc(8192);  // 8KB for boundary JSON
@@ -1626,6 +1741,7 @@ void setup() {
   Serial.println("Step 3: PROVISION");
   Serial.println("\nOptional commands:");
   Serial.println("- INFO (show current config)");
+  Serial.println("- FETCH_BOUNDARY (fetch boundary after modem ready)");
   Serial.println("- RESET (erase all settings)");
   Serial.println("- beep-now (test buzzer)");
   Serial.println("\nHost defaults to: unskilfully-unsoftening-flynn.ngrok-free.dev");
@@ -1731,6 +1847,21 @@ void setup() {
     Serial.println("[PPP] Could not establish IP session.");
     return;
   }
+  
+  // 3) Auto-fetch boundary if provisioned but no boundary loaded
+  if (g_provisioned && g_geofence_vertices == 0) {
+    Serial.println("[SETUP] Device provisioned but no boundary. Fetching now...");
+    lcd_show("Fetching", "Boundary...");
+    
+    if (geofence_fetch_from_backend()) {
+      Serial.println("[SETUP] ✅ Boundary fetched successfully!");
+      lcd_show("Boundary", "Loaded!");
+    } else {
+      Serial.println("[SETUP] ⚠ Boundary fetch failed. Send 'FETCH_BOUNDARY' command to retry.");
+      lcd_show("No Boundary", "Send FETCH");
+    }
+    delay(2000);
+  }
 }
 
 static uint32_t nextSendDue = 0;
@@ -1754,6 +1885,10 @@ static void _serial_poll_for_tests() {
     return;
   }
   if (cmdLower == "info") { cfg_print(); return; }
+  if (cmdLower == "fetch_boundary" || cmdLower == "fetch") {
+    cfg_set_kv("FETCH_BOUNDARY", "");
+    return;
+  }
   
   // RESET/ERASE command - clear all stored configuration
   if (cmdLower == "reset" || cmdLower == "erase") {

@@ -1632,11 +1632,46 @@ class DeviceTokenViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def revoke(self, request, pk=None):
+        """
+        Revoke/deactivate device token (Mark as Lost).
+        This will:
+        1. Set is_active = False (blocks device from connecting)
+        2. Unassign tracker from boat (if assigned)
+        3. Update tracker status to 'lost'
+        4. Hide from map automatically (map filters by is_active)
+        """
         instance = self.get_object()
+        tracker = instance.tracker
+        boat = None
+        boat_mfbr = None
+        
+        # 1. Deactivate the device token
         instance.is_active = False
         instance.save(update_fields=['is_active'])
-        self._log(request, f"DeviceToken revoked for tracker={instance.tracker.BirukBilugID if instance.tracker else instance.name}")
-        return Response({'id': instance.id, 'is_active': instance.is_active}, status=status.HTTP_200_OK)
+        
+        # 2. Unassign tracker from boat if it's linked
+        if tracker and tracker.boat:
+            boat = tracker.boat
+            boat_mfbr = boat.mfbr_number
+            tracker.boat = None
+            tracker.status = 'lost'  # Mark tracker as lost
+            tracker.save(update_fields=['boat', 'status'])
+            self._log(request, f"Tracker {tracker.BirukBilugID} unassigned from boat {boat_mfbr} and marked as lost")
+        elif tracker:
+            # No boat assigned, just mark as lost
+            tracker.status = 'lost'
+            tracker.save(update_fields=['status'])
+            self._log(request, f"Tracker {tracker.BirukBilugID} marked as lost (no boat was assigned)")
+        
+        self._log(request, f"DeviceToken revoked for tracker={tracker.BirukBilugID if tracker else instance.name}")
+        
+        return Response({
+            'id': instance.id,
+            'is_active': instance.is_active,
+            'tracker_status': tracker.status if tracker else None,
+            'unassigned_from_boat': boat_mfbr if boat else None,
+            'message': 'Device marked as lost and unassigned from boat' if boat else 'Device marked as lost'
+        }, status=status.HTTP_200_OK)
         
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
@@ -3732,40 +3767,26 @@ def get_device_boundary(request, device_id):
                 'registered_municipality': tracker.boat.registered_municipality
             }
         
-        # Try to find boundary (prefer water boundary, fallback to land boundary)
+        # Try to find boundary (LAND ONLY for ESP32 testing)
         boundary = None
         boundary_type = None
         
-        # First try MunicipalityBoundary (water boundary)
-        water_boundary = MunicipalityBoundary.objects.filter(name__iexact=municipality_name).first()
-        if not water_boundary:
+        # Use LandBoundary only (no fallback to water boundary)
+        land_boundary = LandBoundary.objects.filter(name__iexact=municipality_name).first()
+        if not land_boundary:
             # Try matching via Municipality FK
             muni_obj = Municipality.objects.filter(name__iexact=municipality_name).first()
             if muni_obj:
-                water_boundary = MunicipalityBoundary.objects.filter(municipality=muni_obj).first()
+                land_boundary = LandBoundary.objects.filter(municipality=muni_obj).first()
         
-        if water_boundary and water_boundary.coordinates:
-            boundary = water_boundary
-            boundary_type = 'water'
-            logger.info(f"[BOUNDARY] Found water boundary for {municipality_name}")
+        if land_boundary and land_boundary.coordinates:
+            boundary = land_boundary
+            boundary_type = 'land'
+            logger.info(f"[BOUNDARY] Using LAND boundary for {municipality_name}")
         else:
-            # Fallback to LandBoundary
-            land_boundary = LandBoundary.objects.filter(name__iexact=municipality_name).first()
-            if not land_boundary:
-                # Try matching via Municipality FK
-                muni_obj = Municipality.objects.filter(name__iexact=municipality_name).first()
-                if muni_obj:
-                    land_boundary = LandBoundary.objects.filter(municipality=muni_obj).first()
-            
-            if land_boundary and land_boundary.coordinates:
-                boundary = land_boundary
-                boundary_type = 'land'
-                logger.info(f"[BOUNDARY] Found land boundary for {municipality_name}")
-        
-        if not boundary:
-            logger.error(f"[BOUNDARY] No boundary data found for {municipality_name}")
+            logger.error(f"[BOUNDARY] No land boundary data found for {municipality_name}")
             return Response({
-                'error': f'No boundary polygon found for {municipality_name}',
+                'error': f'No land boundary polygon found for {municipality_name}',
                 'device_id': device_id,
                 'municipality': municipality_name,
                 'hint': 'Add boundary data via admin panel'
@@ -3792,14 +3813,39 @@ def get_device_boundary(request, device_id):
                 # Lat: -90 to 90, Lng: -180 to 180
                 # Philippines: Lat ~5-21, Lng ~116-127
                 first_pt = coords[0]
-                if len(first_pt) >= 2:
-                    if abs(first_pt[0]) > 90:
+                if isinstance(first_pt, (list, tuple)) and len(first_pt) >= 2:
+                    # If inner element looks like [lng, lat] or [lat, lng]
+                    if isinstance(first_pt[0], (int, float)) and abs(first_pt[0]) > 90:
                         # First value > 90, likely [lng, lat] format
                         polygon = [[pt[1], pt[0]] for pt in coords]
-                    else:
+                    elif isinstance(first_pt[0], (int, float)):
                         # Likely [lat, lng] format already
                         polygon = coords
-        
+                # If coords is [[ [lng,lat], ... ]] (nested), flatten first ring
+                if not polygon and isinstance(first_pt, (list, tuple)) and first_pt and isinstance(first_pt[0], (list, tuple)):
+                    outer_ring = first_pt
+                    polygon = [[pt[1], pt[0]] for pt in outer_ring]
+
+        # At this point, polygon is an array of [lat, lng]
+        if polygon:
+            MAX_DEVICE_VERTICES = 50
+            original_count = len(polygon)
+            if original_count > MAX_DEVICE_VERTICES:
+                # Evenly sample points along the polygon to reduce vertex count
+                step = max(1, original_count // MAX_DEVICE_VERTICES)
+                simplified = polygon[::step]
+                # Ensure we don't exceed the max after slicing
+                if len(simplified) > MAX_DEVICE_VERTICES:
+                    simplified = simplified[:MAX_DEVICE_VERTICES]
+                # Preserve last point of original polygon if possible
+                if simplified[-1] != polygon[-1] and len(simplified) < MAX_DEVICE_VERTICES:
+                    simplified.append(polygon[-1])
+                logger.info(
+                    f"[BOUNDARY] Simplified polygon for {municipality_name}: "
+                    f"{original_count} -> {len(simplified)} vertices"
+                )
+                polygon = simplified
+
         if not polygon or len(polygon) < 3:
             logger.error(f"[BOUNDARY] Invalid polygon data for {municipality_name}")
             return Response({
