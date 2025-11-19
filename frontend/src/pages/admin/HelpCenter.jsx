@@ -494,7 +494,7 @@ const HelpCenter = () => {
             </div>
             <div className="ml-3">
               <p className="text-sm text-blue-700">
-                <strong>System Version:</strong> v5.2 | <strong>Last Updated:</strong> October 2025
+                <strong>System Version:</strong> v5.5 | <strong>Last Updated:</strong> November 2025
               </p>
             </div>
           </div>

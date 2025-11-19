@@ -269,69 +269,35 @@ const ActivityLogReport = () => {
       const fileName =
         startDate && endDate ? `ActivityLog_Report_${startDate}_to_${endDate}.pdf` : "ActivityLog_Report.pdf";
 
-      // add signature block on last page (bottom-right above footer)
-      try {
-        const preparedByName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '—';
-        const notedLabel = notedBy
-          ? `${notedBy.first_name || ''} ${notedBy.last_name || ''}`.trim() + ` — ${notedBy.position || 'Agricultural Center Chief II'}`
-          : `Provincial Agriculturist — Agricultural Center Chief II`;
+      // add signature block on last page (bottom-right above footer) and open in new tab
+      const preparedByName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() : '—';
+      const notedLabel = notedBy
+        ? `${notedBy.first_name || ''} ${notedBy.last_name || ''}`.trim() + ` — ${notedBy.position || 'Agricultural Center Chief II'}`
+        : `Provincial Agriculturist — Agricultural Center Chief II`;
 
-        const lastPage = doc.internal.getNumberOfPages();
-        doc.setPage(lastPage);
-        const pw = doc.internal.pageSize.getWidth();
-        const ph = doc.internal.pageSize.getHeight();
-        const margin = 40;
-        const xRight = pw - margin;
-        let yPos = ph - 60;
-        doc.setFontSize(10);
-        doc.text(`Prepared by: ${preparedByName}`, xRight, yPos, { align: 'right' });
-        yPos += 14;
-        doc.text(`Noted by: ${notedLabel}`, xRight, yPos, { align: 'right' });
-        yPos += 14;
-        doc.text(`Date generated: ${new Date().toLocaleDateString()}`, xRight, yPos, { align: 'right' });
+      const lastPage = doc.internal.getNumberOfPages();
+      doc.setPage(lastPage);
+      const pw2 = doc.internal.pageSize.getWidth();
+      const ph2 = doc.internal.pageSize.getHeight();
+      const marginRight = 40;
+      const xRight = pw2 - marginRight;
+      let yPos = ph2 - 60;
+      doc.setFontSize(10);
+      doc.text(`Prepared by: ${preparedByName}`, xRight, yPos, { align: 'right' });
+      yPos += 14;
+      doc.text(`Noted by: ${notedLabel}`, xRight, yPos, { align: 'right' });
+      yPos += 14;
+      doc.text(`Date generated: ${new Date().toLocaleDateString()}`, xRight, yPos, { align: 'right' });
 
-        // helper: save+preview PDF with File System Access API fallback
-        const saveAndPreviewPdf = async (pdfDoc, fileName) => {
-          const blob = pdfDoc.output('blob');
-          if (window.showSaveFilePicker) {
-            try {
-              const opts = { suggestedName: fileName, types: [{ description: 'PDF file', accept: { 'application/pdf': ['.pdf'] } }] };
-              const handle = await window.showSaveFilePicker(opts);
-              const writable = await handle.createWritable();
-              await writable.write(blob);
-              await writable.close();
-              const url = URL.createObjectURL(blob);
-              const w = window.open(url);
-              if (w) w.onload = () => w.print();
-              return true;
-            } catch (e) {
-              return false;
-            }
-          }
-          if (!window.confirm('Choose OK to download the PDF and open print preview, or Cancel to abort.')) return false;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          const w = window.open(url);
-          if (w) w.onload = () => w.print();
-          return true;
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (w) {
+        w.onload = () => {
+          try { w.focus(); w.print(); } catch (e) {}
         };
-
-        (async () => {
-          const ok = await saveAndPreviewPdf(doc, fileName);
-          if (!ok) {
-            setShowNotification(false);
-            return;
-          }
-          setTimeout(() => setShowNotification(false), 2000);
-        })();
-      } catch (err) {
-        setTimeout(() => setShowNotification(false), 2000);
       }
+      setTimeout(() => setShowNotification(false), 2000);
     };
   };
 

@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNotifications } from '../contexts/NotificationContext'
 import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import logo from '../assets/logo.png'
 import { apiClient } from '../services/api_urls'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 import { ChevronRightIcon } from '@heroicons/react/24/outline'
 import { useAuth } from '../contexts/AuthContext'
-import provincialAgriculturistService from '../services/provincialAgriculturistService'
+import { getSignatories } from '../services/signatoriesService'
 
 const formatReportNo = (id, createdAt) => {
   try {
@@ -21,128 +22,165 @@ const formatReportNo = (id, createdAt) => {
 
 const toFixedOrNA = (num, digits=5) => (Number.isFinite(Number(num)) ? Number(num).toFixed(digits) : 'N/A')
 
-const downloadPdf = (n, generatedByName, notedBy) => {
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+const downloadPdf = async (n, user, notedBy) => {
+  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' })
+  const pw = doc.internal.pageSize.getWidth()
+  const ph = doc.internal.pageSize.getHeight()
+  const margin = 48
+  let y = margin
 
-  const marginX = 48
-  let y = 56
-  const line = (txt, opts = {}) => {
-    const { bold = false, size = 12, gap = 10 } = opts
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setFontSize(size)
-    doc.text(String(txt), marginX, y, { maxWidth: 500 })
-    y += gap + size
+  // Header (fits within margins)
+  const logoW = 80, logoH = 80, gap = 16
+  try { doc.addImage(logo, 'PNG', margin, y, logoW, logoH) } catch (_) {}
+  const textX = margin + logoW + gap
+  const textMaxW = pw - margin - textX
+  doc.setDrawColor(0)
+  // Office title (single line, auto-shrink)
+  const title = 'Office of the Provincial Agriculturist - Fisheries Section'
+  let titleSize = 20
+  doc.setFont('helvetica','bold')
+  while (titleSize > 10) {
+    doc.setFontSize(titleSize)
+    if (doc.getTextWidth(title) <= textMaxW) break
+    titleSize -= 1
   }
+  doc.text(title, textX, y + 20)
+  // Contact lines
+  doc.setFont('helvetica','normal'); doc.setFontSize(10)
+  const contact = [
+    'Provincial Agriculturist Office, Aguila Road, Brgy. II',
+    'City of San Fernando, La Union 2500',
+    'Phone: (072) 888-3184 / 607-4492 / 607-4488',
+    'Email: opaglaunion@yahoo.com'
+  ]
+  let ty = y + 36
+  contact.forEach((line, idx) => { doc.text(line, textX, ty + idx * 12, { maxWidth: textMaxW }) })
+  const headerBottom = Math.max(y + logoH, ty + (contact.length * 12)) + 10
+  doc.setLineWidth(1); doc.line(margin, headerBottom, pw - margin, headerBottom)
+  y = headerBottom + 16
 
-  // Load logo then render PDF (fallback if image fails)
-  const logoImg = new Image()
-  let logoLoaded = false
-  logoImg.onload = () => {
-    logoLoaded = true
-    renderPdf()
-  }
-  logoImg.onerror = () => {
-    // proceed without logo
-    renderPdf()
-  }
-  logoImg.src = logo
+  // Centered title below header
+  doc.setFont('helvetica','bold'); doc.setFontSize(18)
+  doc.text('Boundary Violation Report', pw/2, y, { align: 'center' })
+  y += 18
 
-  function renderPdf() {
-    // Header (with logo if available)
-    if (logoLoaded) {
-      const logoWidth = 80
-      const logoHeight = 80
-      doc.addImage(logoImg, 'PNG', marginX, 20, logoWidth, logoHeight)
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      doc.text(
-        'Office of the Provincial Agriculturist - Fisheries Section',
-        marginX + logoWidth + 20,
-        40,
-        { maxWidth: doc.internal.pageSize.getWidth() - marginX - logoWidth - 20 }
-      )
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      const contactText = 'Provincial Agriculturist Office, Aguila Road, Brgy. II\nCity of San Fernando, La Union 2500\nPhone: (072) 888-3184 / 607-4492 / 607-4488\nEmail: opaglaunion@yahoo.com'
-      doc.text(contactText, marginX + logoWidth + 20, 60, { maxWidth: 400 })
-      // Divider line after header
-      const headerHeight = 120
-      doc.setLineWidth(1)
-      doc.line(marginX, headerHeight, doc.internal.pageSize.getWidth() - marginX, headerHeight)
-      y = headerHeight + 20
-    } else {
-      // simple header fallback
-      line('Boundary Violation Report', { bold: true, size: 18, gap: 8 })
-      doc.setDrawColor(230); doc.line(marginX, y - 6, 560, y - 6)
-      y += 6
+  // Meta table
+  const boatName = n.mfbr_number || n.boat_name || `Boat ${n.boat || ''}`
+  const metaRows = [
+    ['MFBR Number', boatName],
+    ['Boat Name', n.boat_name || n.boat || 'N/A'],
+    ['Tracker Number', n.tracker_number || 'N/A'],
+    ['Report Number', formatReportNo(n.id, n.created_at)],
+    ['Contact Person', (
+      n.contact_person_full_name || n.contact_full_name || n.emergency_contact_full_name || n.emergency_contact_name || n.fisherfolk_contact_person_name || n.contact_person_name || n.contact_name || n.fisherfolk_contact_person || 'N/A'
+    )],
+    ['Contact Number', (
+      n.contact_person_number || n.contact_number || n.contact_mobile || n.fisherfolk_contact_number || n.fisherfolk_contact_person_number || 'N/A'
+    )],
+    ['Idle Start', new Date(n.violation_timestamp || n.created_at).toLocaleString()],
+    ['Idle End', (() => { const secs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes)||0) * 60); const s = new Date(new Date(n.violation_timestamp || n.created_at).getTime() + secs*1000); return s.toLocaleString() })()]
+  ]
+  autoTable(doc, { startY: y, head: [['Field','Value']], body: metaRows, theme: 'grid', styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 }, headStyles: { fillColor: [241,245,249], textColor: [17,24,39] }, columnStyles: { 0: { cellWidth: 160, fontStyle: 'bold' }, 1: { cellWidth: pw - margin*2 - 160 } }, margin: { left: margin, right: margin } })
+
+  y = doc.lastAutoTable.finalY + 16
+
+  // Narrative paragraph
+  const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
+  const owner = n.fisherfolk_name || 'N/A'
+  const lat = toFixedOrNA(n.current_lat)
+  const lng = toFixedOrNA(n.current_lng)
+  const paragraph = `${boatName}${n.boat_name ? ` (${n.boat_name})` : ''}, owned by ${owner}, is now subject to questioning after the boat was observed idle for ${mins} mins from ${new Date(n.violation_timestamp || n.created_at).toLocaleString()} to ${(() => { const secs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes)||0) * 60); const s = new Date(new Date(n.violation_timestamp || n.created_at).getTime() + secs*1000); return s.toLocaleString() })()} at location (${lng}, ${lat}), ${n.to_municipality}, away from registered municipality ${n.from_municipality || ''}. An SMS notification has been sent immediately to the fisherfolk’s contact person, ${(
+    n.contact_person_full_name || n.contact_full_name || n.emergency_contact_full_name || n.emergency_contact_name || n.fisherfolk_contact_person_name || n.contact_person_name || n.contact_name || n.fisherfolk_contact_person || 'N/A'
+  )}, now being subject to questioning. Monitoring continues for any movement or activity.`
+  doc.setFont('helvetica','normal'); doc.setFontSize(12)
+  const p = doc.splitTextToSize(paragraph, pw - margin*2)
+  doc.text(p, margin, y); y += 18 * p.length + 8
+
+  // Static map screenshot of coordinates
+  const boxH = 180
+  const boxW = pw - margin*2
+  const mapUrl = (() => {
+    const latNum = Number(n.current_lat)
+    const lngNum = Number(n.current_lng)
+    const z = 14
+    const size = `${Math.min(1024, Math.floor(boxW))}x${Math.min(512, boxH)}`
+    // Public OSM static map service (best-effort, rate-limited)
+    return `https://staticmap.openstreetmap.de/staticmap.php?center=${latNum},${lngNum}&zoom=${z}&size=${size}&maptype=mapnik&markers=${latNum},${lngNum},red-pushpin`
+  })()
+
+  const toDataURL = (url) => new Promise((resolve) => {
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.onload = () => {
+        try {
+          const cw = Math.min(1024, Math.floor(boxW))
+          const ch = Math.min(512, boxH)
+          const canvas = document.createElement('canvas')
+          canvas.width = cw
+          canvas.height = ch
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, cw, ch)
+          resolve(canvas.toDataURL('image/png'))
+        } catch { resolve(null) }
+      }
+      img.onerror = () => resolve(null)
+      img.src = url
+    } catch { resolve(null) }
+  })
+
+  const mapDataUrl = await toDataURL(mapUrl)
+  if (mapDataUrl) {
+    try {
+      doc.addImage(mapDataUrl, 'PNG', margin, y, boxW, boxH)
+    } catch {
+      doc.setDrawColor(209,213,219); doc.setLineWidth(1); doc.rect(margin, y, boxW, boxH)
+      doc.setFontSize(11); doc.setTextColor(107,114,128); doc.text('Map image unavailable', pw/2, y + boxH/2, { align:'center' }); doc.setTextColor(17,24,39)
     }
+  } else {
+    doc.setDrawColor(209,213,219); doc.setLineWidth(1); doc.rect(margin, y, boxW, boxH)
+    doc.setFontSize(11); doc.setTextColor(107,114,128); doc.text('Map image unavailable', pw/2, y + boxH/2, { align:'center' }); doc.setTextColor(17,24,39)
+  }
+  y += boxH + 24
 
-    // Meta
-    line(`MFBR Number: ${n.mfbr_number || n.boat_name || 'N/A'}`, { bold: true })
-    line(`Tracker Number: ${n.tracker_number || 'N/A'}`, { bold: true })
-    line(`Report Number: ${formatReportNo(n.id, n.created_at)}`, { bold: true })
-    y += 6
+  // Footer
+  const footer = () => { doc.setFont('helvetica','normal'); doc.setFontSize(10); const d=new Date().toLocaleDateString(); doc.text('Office of the Provincial Agriculturist - Fisheries Section.', margin, ph-24); doc.text(`Date Generated: ${d}`, pw - margin, ph-24, { align:'right' }) }
+  footer()
 
-    // Body paragraph
-    const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
-    const owner = n.fisherfolk_name || 'N/A'
-    const lat = toFixedOrNA(n.current_lat)
-    const lng = toFixedOrNA(n.current_lng)
-    const municipality = n.to_municipality
-    const boatIdent = n.mfbr_number || n.boat_name || `Boat ${n.boat?.boat_id || ''}`
-
-    doc.setFont('helvetica','normal'); doc.setFontSize(12)
-    const paragraph = `${boatIdent}, owned by ${owner}, is now being subjected to questioning due to being idle for ${mins} mins at the location (${lng}, ${lat}), ${municipality}. An SMS notification will be sent immediately to the boat owner (${owner}).`
-    const split = doc.splitTextToSize(paragraph, 500)
-    doc.text(split, marginX, y)
-    y += 18 * split.length + 16
-
-    // Signature block at bottom right
-    const dateStr = new Date().toLocaleString()
-    const notedLabel = notedBy
-      ? `${notedBy.first_name || ''} ${notedBy.last_name || ''}`.trim() + ` — ${notedBy.position || 'Agricultural Center Chief II'}`
-      : `Provincial Agriculturist — Agricultural Center Chief II`;
-    
-    // Position signature block at bottom right
-    const pageWidth = doc.internal.pageSize.getWidth()
-    const pageHeight = doc.internal.pageSize.getHeight()
-    const rightMargin = 48
-    const bottomMargin = 140
-    let signatureY = pageHeight - bottomMargin
-    
-    doc.setFontSize(11)
-    doc.text(`Prepared by: ${generatedByName || 'Ab\'Cd Ubungen'}`, pageWidth - rightMargin, signatureY, { align: 'right' })
-    signatureY += 16
-    doc.text(`Noted by: ${notedLabel}`, pageWidth - rightMargin, signatureY, { align: 'right' })
-    signatureY += 16
-    doc.text(`Date generated: ${dateStr}`, pageWidth - rightMargin, signatureY, { align: 'right' })
-    signatureY += 6
-    
-    // Add signature line
-    const lineStartX = pageWidth - rightMargin - 150
-    const lineEndX = pageWidth - rightMargin
-    signatureY += 10
-    doc.setLineWidth(0.5)
-    doc.line(lineStartX, signatureY, lineEndX, signatureY)
-    signatureY += 12
-    doc.setFontSize(9)
-    doc.text('Signature', (lineStartX + lineEndX) / 2, signatureY, { align: 'center' })
-
-    // Footer copyright (copied style)
-    doc.setFontSize(10)
-    doc.text(
-      `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`,
-      marginX,
-      doc.internal.pageSize.getHeight() - 20
-    )
-
-    // Save
-    doc.save(`${formatReportNo(n.id, n.created_at)}.pdf`)
+  // Signatories
+  const preparedName = (user ? `${user.first_name || ''} ${user.middle_name ? user.middle_name.charAt(0)+'. ' : ''}${user.last_name || ''}` : '').replace(/\s+/g,' ').trim().toUpperCase()
+  const humanRole = (user?.user_role || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())
+  const preparedTitle = `${humanRole}${user?.position ? ` - ${user.position}` : ''}` || 'Prepared by'
+  const notedName = notedBy ? `${notedBy.first_name || ''} ${notedBy.middle_name ? notedBy.middle_name.charAt(0)+'. ' : ''}${notedBy.last_name || ''}`.replace(/\s+/g,' ').trim().toUpperCase() : ''
+  const notedTitle = notedBy?.position || 'Provincial Agriculturist'
+  const role = (user?.user_role || '').toLowerCase()
+  const colW = (pw - margin*2) / 3
+  let sy = y
+  const drawSigCol = (idx, cap, name, title) => { const x = margin + colW*idx; doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(cap, x, sy); doc.line(x, sy+34, x+colW-16, sy+34); doc.setFont('helvetica','bold'); doc.text(name || '', x+4, sy+52); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(title || '', x+4, sy+68) }
+  if (sy + 100 > ph - 40) { doc.addPage('letter','portrait'); sy = margin; footer() }
+  if (role.includes('municipal')) {
+    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
+    drawSigCol(1, 'Certified by', (n.municipal_agriculturist_name || 'MUNICIPAL AGRICULTURIST'), 'Municipal Agriculturist')
+    drawSigCol(2, 'Noted by', (n.municipal_mayor_name || 'MUNICIPAL MAYOR'), 'Municipal Mayor')
+  } else if (role.includes('provincial')) {
+    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
+    drawSigCol(1, 'Noted by', notedName, notedTitle)
+  } else if (role.includes('admin')) {
+    drawSigCol(0, 'Prepared by', preparedName, humanRole)
+    drawSigCol(1, 'Noted by', notedName, notedTitle)
+  } else {
+    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
+    drawSigCol(1, 'Noted by', notedName, notedTitle)
   }
 
+  // Open in new tab and trigger print
+  try { doc.autoPrint() } catch {}
+  const blobUrl = doc.output('bloburl')
+  const w = window.open(blobUrl, '_blank')
+  // Some browsers need a delay before print
+  try { if (w) setTimeout(() => w.print && w.print(), 500) } catch {}
 }
 
-// Messenger-style notification list item
 // Messenger-style notification list item
 const NotificationListItem = ({ n, isSelected, onClick, isRead }) => {
   const boatName = n.mfbr_number || n.boat_name || `Boat ${n.boat || ''}`
@@ -471,14 +509,16 @@ const Notifications = () => {
     let mounted = true
     const fetchProv = async () => {
       try {
-        const resp = await provincialAgriculturistService.getAll()
+        const data = await getSignatories({ is_active: true })
         if (!mounted) return
-        const list = resp?.data || []
-        const match = list.find((p) => ((p.position || '').toString().toLowerCase().trim()) === 'agricultural center chief ii')
+        const list = Array.isArray(data) ? data : (data?.results || [])
+        const norm = (v='') => String(v).toLowerCase().trim()
+        const match = list.find(s => {
+          const p = norm(s.position)
+          return p === 'provincial agriculturist' || (p.includes('provincial') && p.includes('agriculturist')) || p === 'agricultural center chief ii'
+        })
         if (match) setNotedBy(match)
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) { /* ignore */ }
     }
     fetchProv()
     return () => { mounted = false }
@@ -553,147 +593,8 @@ const Notifications = () => {
 
   const handlePrint = async (n) => {
     try {
-      const boatName = n.mfbr_number || n.boat_name || `Boat ${n.boat || ''}`
-      const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
-      const owner = n.fisherfolk_name || 'N/A'
-      const boatProperName = n.boat_name || n.boat || ''
-      const contactPersonName = (
-        n.contact_person_full_name ||
-        n.contact_full_name ||
-        n.emergency_contact_full_name ||
-        n.emergency_contact_name ||
-        n.fisherfolk_contact_person_name ||
-        n.contact_person_name ||
-        n.contact_name ||
-        n.fisherfolk_contact_person ||
-        ''
-      )
-      const contactPersonNumber = (
-        n.contact_person_number ||
-        n.contact_number ||
-        n.contact_mobile ||
-        n.fisherfolk_contact_number ||
-        n.fisherfolk_contact_person_number ||
-        ''
-      )
-      const lat = Number(n.current_lat).toFixed(5)
-      const lng = Number(n.current_lng).toFixed(5)
-      const created = new Date(n.created_at).toLocaleString()
-      const status = (n.report_status || 'Not Reported')
-      const dateShort = (()=>{ const d=new Date(); const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); const yy=d.getFullYear(); return `${dd}/${mm}/${yy}` })()
-      const trackerNo = n.tracker_number || 'N/A'
-      const reportNo = (()=>{ try{ const d=new Date(n.created_at); return `RPT-${d.getFullYear()}-${String(n.id||0).padStart(4,'0')}`}catch(_){ return `RPT-${String(n.id||0).padStart(4,'0')}`}})()
-
-      const dwellSecs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes) || 0) * 60)
-      const idleStartDt = new Date(n.violation_timestamp || n.created_at)
-      const idleEndDt = new Date(idleStartDt.getTime() + (dwellSecs * 1000))
-      const idleStartStr = idleStartDt.toLocaleString()
-      const idleEndStr = idleEndDt.toLocaleString()
-
-      const html = `<!doctype html><html><head>
-        <meta charset="utf-8"/>
-        <title>Boundary Violation Report - ${boatName}</title>
-        <style>
-          @page { size: A4; margin: 15mm }
-          html, body { height: 100%; }
-          body{font-family: Arial, Helvetica, sans-serif; color:#111827; margin:0; -webkit-print-color-adjust: exact; print-color-adjust: exact}
-          .page{ width: 210mm; margin: 0 auto; padding: 0 0 10mm 0; box-sizing: border-box }
-          .header-wrap{display:flex;align-items:center;gap:16px}
-          .logo{width:84px;height:84px;object-fit:contain}
-          .hdr-title{font-size:22px;font-weight:800;color:#1f2937}
-          .hdr-sub{color:#374151;line-height:1.4;font-size:12px}
-          .spacer{height:16px}
-          .meta{margin-top:16px}
-          .meta .row{margin:3px 0}
-          .meta .label{font-weight:700}
-          .bodyp{margin-top:16px;line-height:1.75;color:#111827}
-          .bodyp strong{font-weight:700}
-          .shot{margin-top:18px;border:1px solid #d1d5db;border-radius:4px;overflow:hidden}
-          #map{width:100%;height:300px}
-          .sign{display:flex;justify-content:space-between;margin-top:28px}
-          .sign .col{width:48%}
-          .sign .cap{font-size:12px;color:#374151;margin-bottom:28px}
-          .line{border-top:1px solid #111827;margin-top:40px}
-          .roles{display:flex;gap:6px;align-items:center;color:#374151;font-size:12px;margin-top:6px}
-          .footer{margin-top:26px;border-top:1px solid #e5e7eb;padding-top:8px;color:#6b7280;font-size:12px;display:flex;justify-content:space-between}
-          @media print{button{display:none}}
-          /* Leaflet print fixes */
-          .leaflet-container{background:#fff !important}
-        </style>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-      </head><body>
-        <div class="page">
-        <div class="header-wrap">
-          <img class="logo" src="${logo}" alt="logo" />
-          <div>
-            <div class="hdr-title">Office of the Provincial Agriculturist - Fisheries Section</div>
-            <div class="hdr-sub">
-              Provincial Agriculturist Office, Aguila Road, Brgy. II<br/>
-              City of San Fernando, La Union 2500<br/>
-              Phone: (072) 888-3184 / 607-4492 / 607-4488<br/>
-              Email: opaglaunion@yahoo.com
-            </div>
-          </div>
-        </div>
-        <div class="spacer"></div>
-
-        <div class="meta">
-          <div class="row"><span class="label">MFBR Number:</span> ${boatName}</div>
-          <div class="row"><span class="label">Boat Name:</span> ${boatProperName || 'N/A'}</div>
-          <div class="row"><span class="label">Tracker Number:</span> ${trackerNo}</div>
-          <div class="row"><span class="label">Report Number:</span> ${reportNo}</div>
-          <div class="row"><span class="label">Contact Person:</span> ${contactPersonName || 'N/A'}</div>
-          <div class="row"><span class="label">Contact Number:</span> ${contactPersonNumber || 'N/A'}</div>
-          <div class="row"><span class="label">Idle Start:</span> ${idleStartStr}</div>
-          <div class="row"><span class="label">Idle End:</span> ${idleEndStr}</div>
-        </div>
-
-        <p class="bodyp">
-          ${boatName}${boatProperName ? ` (${boatProperName})` : ''}, owned by <strong>${owner}</strong>, is now subject to questioning after the boat
-          was observed idle for <strong>${mins} mins</strong> from <strong>${idleStartStr}</strong> to <strong>${idleEndStr}</strong> at location <strong>(${lng}, ${lat})</strong>,
-          <strong>${n.to_municipality}</strong>, away from registered municipality <strong>${n.from_municipality || ''}</strong>. An SMS notification has been sent immediately to the
-          fisherfolk’s contact person, <strong>${contactPersonName || 'N/A'}</strong>, now being subject to questioning. Monitoring continues for any movement or activity.
-        </p>
-
-        <div class="shot"><div id="map"></div></div>
-
-        <div class="sign">
-          <div class="col">
-            <div class="cap">Prepared by:</div>
-            <div class="line"></div>
-            <div class="roles">Municipal Agriculturist&nbsp;&nbsp;or&nbsp;&nbsp;Provincial Agriculturist</div>
-          </div>
-          <div class="col">
-            <div class="cap">Noted by:</div>
-            <div class="line"></div>
-            <div class="roles">Provincial Agriculturist</div>
-          </div>
-        </div>
-
-        <div class="footer"><span>© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.</span><span>Date Generated: ${dateShort}</span></div>
-        <button onclick="window.print()" style="margin-top:16px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff">Print</button>
-        </div>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-        <script>
-          (function(){
-            var lat=${lat}, lng=${lng};
-            var m = L.map('map', { zoomControl: false, attributionControl: false }).setView([lat,lng], 13);
-            var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-            tl.addTo(m);
-            var marker = L.marker([lat,lng]).addTo(m);
-            var printed = false;
-            tl.on('load', function(){ if (printed) return; printed = true; setTimeout(function(){ try { window.focus(); window.print(); } catch(e){} }, 400); });
-            // Fallback print if tiles fail
-            setTimeout(function(){ if (!printed) { try { window.focus(); window.print(); } catch(e){} } }, 2500);
-          })();
-        </script>
-      </body></html>`
-
-      const w = window.open('', '_blank')
-      if (!w) return
-      w.document.write(html)
-      w.document.close()
-    } catch(e) {
+      await downloadPdf(n, user, notedBy)
+    } catch (e) {
       console.error('Print failed', e)
     }
   }

@@ -6,6 +6,7 @@ import { GEAR_MAP } from "../../../constants/gearMap";
 import FisherfolkSearchForm from "../FisherfolkSearchForm";
 import RegistrationDetails from "./RegistrationDetails";
 import { getMunicipalities } from "../../../services/municipalityService";
+import { useAuth } from "../../../contexts/AuthContext";
 
 // Normalize municipality names for comparison (treat aliases equally, case-insensitive)
 const normalizeMunicipality = (name) => {
@@ -60,6 +61,8 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   const location = useLocation();
   const fisherfolkFromState = location.state?.fisherfolk;
   const initialFromNav = location?.state?.initialData;
+
+  const { user } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(
     initialData.fisherfolk_registration_number ? 1 : 0
@@ -193,13 +196,13 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       // store file object in formData
       setFormData((prev) => ({
         ...prev,
-        boat_image: file, // ✅ real file, not base64
+        boat_image: file, // real file, not base64
       }));
 
       // generate preview (without touching formData)
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreview(reader.result); // ✅ base64 only for preview
+        setPreview(reader.result); // base64 only for preview
       };
       reader.readAsDataURL(file);
     }
@@ -211,6 +214,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     const fetchLatestFisherfolk = async () => {
       try {
         const allFisherfolk = await getFisherfolk();
+
         // Define coastal municipalities
         const coastalMunicipalities = [
           "Agoo", "Aringay", "Bacnotan", "Balaoan", "Bangar",
@@ -237,12 +241,22 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         const fisherfolkWithAddresses = await Promise.all(addressPromises);
 
         // Filter by coastal municipalities and sort
-        const latest = fisherfolkWithAddresses
+        let latest = fisherfolkWithAddresses
           .filter(f => {
             const municipality = f.address?.municipality || f.municipality;
             const isCoastal = muniInList(municipality, coastalMunicipalities);
             return isCoastal;
-          })
+          });
+
+        // If logged-in user is a Municipal Agriculturist, restrict to their municipality
+        if (user?.user_role === "municipal_agriculturist" && user?.municipality) {
+          latest = latest.filter(f => {
+            const municipality = f.address?.municipality || f.municipality;
+            return muniInList(municipality, [user.municipality]);
+          });
+        }
+
+        latest = latest
           .sort((a, b) => new Date(b.date_added) - new Date(a.date_added))
           .slice(0, 8);
         setLatestFisherfolk(latest);
@@ -251,7 +265,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       }
     };
     fetchLatestFisherfolk();
-  }, []);
+  }, [user]);
 
   // Municipality codes mapping
   const municipalityCodes = {
