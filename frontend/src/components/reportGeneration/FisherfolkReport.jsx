@@ -282,11 +282,13 @@ const handleDownloadPDF = () => {
 
         // Footer (draw on every page)
         doc.setFontSize(10);
-        doc.text(
-          `© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`,
-          data.settings.margin.left,
-          doc.internal.pageSize.getHeight() - 20
-        );
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const leftX = data.settings.margin.left;
+        const rightX = pageW - data.settings.margin.left;
+        const footY = pageH - 20;
+        doc.text(`© ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`, leftX, footY);
+        doc.text(`Date generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, rightX, footY, { align: 'right' });
       },
     });
     const fileName = startDate && endDate
@@ -311,52 +313,18 @@ const handleDownloadPDF = () => {
       doc.text(`Prepared by: ${preparedByName}`, xRight, yPos, { align: 'right' });
       yPos += 14;
       doc.text(`Noted by: ${notedLabel}`, xRight, yPos, { align: 'right' });
-      yPos += 14;
-      doc.text(`Date generated: ${new Date().toLocaleDateString()}`, xRight, yPos, { align: 'right' });
+      // Date moved to footer per rules
 
-      // helper: save+preview PDF with File System Access API fallback
-      const saveAndPreviewPdf = async (pdfDoc, fileName) => {
-        const blob = pdfDoc.output('blob');
-        if (window.showSaveFilePicker) {
-          try {
-            const opts = {
-              suggestedName: fileName,
-              types: [{ description: 'PDF file', accept: { 'application/pdf': ['.pdf'] } }],
-            };
-            const handle = await window.showSaveFilePicker(opts);
-            const writable = await handle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            const url = URL.createObjectURL(blob);
-            const w = window.open(url);
-            if (w) w.onload = () => w.print();
-            return true;
-          } catch (e) {
-            return false;
-          }
-        }
-
-        if (!window.confirm('Choose OK to download the PDF and open print preview, or Cancel to abort.')) return false;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        const w = window.open(url);
-        if (w) w.onload = () => w.print();
-        return true;
-      };
-
-      (async () => {
-        const ok = await saveAndPreviewPdf(doc, fileName);
-        if (!ok) {
-          setShowNotification(false);
-          return;
-        }
-        setTimeout(() => setShowNotification(false), 2000);
-      })();
+      // Open in a new tab and auto-print
+      const blob = doc.output('blob');
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (w) {
+        w.onload = () => {
+          try { w.focus(); w.print(); } catch (e) {}
+        };
+      }
+      setTimeout(() => setShowNotification(false), 2000);
     } catch (err) {
       setTimeout(() => setShowNotification(false), 2000);
     }

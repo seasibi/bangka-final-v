@@ -301,10 +301,12 @@ def protected_view(request):
         user_data["first_name"] = user.provincial_agriculturist.first_name
         user_data["middle_name"] = getattr(user.provincial_agriculturist, "middle_name", None)
         user_data["last_name"] = user.provincial_agriculturist.last_name
+        user_data["position"] = user.provincial_agriculturist.position
         
     # If user is a municipal agriculturist, include municipality
     if user.user_role == 'municipal_agriculturist' and user.municipal_agriculturist:
         user_data["municipality"] = user.municipal_agriculturist.municipality
+        user_data["position"] = user.municipal_agriculturist.position
         user_data["first_name"] = user.municipal_agriculturist.first_name
         user_data["middle_name"] = getattr(user.municipal_agriculturist, "middle_name", None)
         user_data["last_name"] = user.municipal_agriculturist.last_name

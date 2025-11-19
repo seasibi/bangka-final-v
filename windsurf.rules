@@ -1,0 +1,157 @@
+# Windsurf Rules for Report Generation (Bangka Monitoring System)
+# Purpose: Keep report generation consistent across roles, reports, and screens.
+
+version: 1
+scopes:
+  - name: pdf_reports
+    description: Rules for all PDF report generation across roles and report types
+    applies_to:
+      - frontend/src/pages/municipal/ReportGeneration.jsx
+      - frontend/src/pages/admin/ReportGeneration.jsx
+      - frontend/src/components/reportGeneration/FisherfolkReport.jsx
+      - frontend/src/components/reportGeneration/BoatReport.jsx
+      - frontend/src/components/reportGeneration/ActivityLogReport.jsx
+      - frontend/src/pages/Notifications.jsx
+
+rules:
+  - id: pdf_engine_and_open
+    description: Use jsPDF + jspdf-autotable; preview in new tab and auto-print
+    enforce:
+      - use_jsPDF: true
+      - use_jspdf_autotable: true
+      - open_behavior:
+          target: new_tab
+          auto_print: true
+
+  - id: pdf_header
+    description: Standardized PDF header branding (all roles)
+    enforce:
+      - header:
+          logo: frontend/src/assets/logo.png
+          organization_title: "Office of the Provincial Agriculturist - Fisheries Section"
+          contact_lines:
+            - "Provincial Agriculturist Office, Aguila Road, Brgy. II"
+            - "City of San Fernando, La Union 2500"
+            - "Phone: (072) 888-3184 / 607-4492 / 607-4488"
+            - "Email: opaglaunion@yahoo.com"
+          divider_after_header: true
+
+  - id: pdf_footer
+    description: Standardized PDF footer (all roles)
+    enforce:
+      - footer:
+          left_text: "© {year} Office of the Provincial Agriculturist - Fisheries Section."
+          right_text: "Date generated: {date_long}"
+          placement: bottom
+
+  - id: report_titles
+    description: Standard report titles per type
+    enforce:
+      - titles:
+          Fisherfolk Report: "Fisherfolk Report"
+          Boat Registry Report: "Boat Registry Report"
+          Boundary Violation Report: "Boundary Violation Report"
+          Activity Log Report: "System Activity Logs Report"
+
+  - id: municipality_normalization
+    description: Normalize municipality aliases when comparing strings
+    enforce:
+      - normalize_map:
+          "san fernando": "City Of San Fernando"
+          "city of san fernando": "City Of San Fernando"
+          "sto. tomas": "Santo Tomas"
+          "santo tomas": "Santo Tomas"
+
+  - id: municipal_scope
+    description: Scope data to Municipal Agriculturist's municipality (client-side fallback)
+    applies_when: user.user_role == 'municipal_agriculturist'
+    enforce:
+      - fisherfolk_filter: item.address?.municipality == user.municipality (after normalization)
+      - boats_filter: item.fisherfolk_registration_number?.address?.municipality == user.municipality (after normalization)
+      - boundary_filter: (item.from_municipality == user.municipality) OR (item.to_municipality == user.municipality) (after normalization)
+    notes:
+      - Prefer server-side query params where available to reduce payload; fallback to client-side filter.
+
+  - id: columns_mapping
+    description: Keep table columns consistent across UI and PDFs
+    enforce:
+      - Fisherfolk Report:
+          columns:
+            - Registration #
+            - Municipality
+            - Barangay
+            - Name
+            - Main Livelihood
+      - Boat Registry Report:
+          columns:
+            - MFBR #
+            - Boat Name
+            - Owner Name
+            - Boat Type
+            - Tracker
+      - Boundary Violation Report:
+          columns:
+            - MFBR #
+            - Boat Name
+            - Owner Name
+            - From
+            - To
+            - Reason/Duration
+            - Status
+      - Activity Log Report:
+          columns:
+            - Date
+            - User
+            - Action
+            - Description
+
+  - id: signatories_by_role
+    description: Role-aware signatories and signature blocks
+    enforce:
+      - municipal_agriculturist:
+          prepared_by:
+            name_source: user
+            title: "Municipal Agriculturist - {user.municipal_agriculturist.position|user.position}"
+          additional_signatories:
+            - role: Municipal Agriculturist
+              source: signatories.by_municipality.position=="Municipal Agriculturist"
+            - role: Municipal Mayor
+              source: signatories.by_municipality.position=="Mayor"
+      - provincial_agriculturist:
+          prepared_by:
+            name_source: user
+            title: "Prepared by"
+          additional_signatories:
+            - role: Provincial Agriculturist
+              source: provincialAgriculturistService.getAll().position=="Agricultural Center Chief II"
+      - admin:
+          prepared_by:
+            name_source: user
+            title: "Prepared by"
+          additional_signatories:
+            - role: Provincial Agriculturist
+              source: provincialAgriculturistService.getAll().position=="Agricultural Center Chief II"
+    notes:
+      - Names should be formatted as FIRST M. LAST (uppercase) where applicable in municipal PDFs.
+      - If signatory not found, show role label only or safe fallback label.
+
+  - id: error_handling
+    description: Fail-safe behavior
+    enforce:
+      - If logo fails to load, continue rendering header texts without image.
+      - If signatories cannot be fetched, still render PDF with available data and role labels.
+
+  - id: date_range_badge
+    description: Show selected date range beneath title when applicable
+    enforce:
+      - text: "Date Range: {startDate} to {endDate}" OR "Date Range: All Dates"
+      - placement: below_title_left
+
+  - id: accessibility
+    description: Ensure readable fonts and sizes
+    enforce:
+      - body_font: helvetica
+      - base_font_size: 10
+      - header_title_size: 16-24
+      - table_alternate_rows: true
+
