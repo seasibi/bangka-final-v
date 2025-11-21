@@ -13,6 +13,7 @@ const MyProfile = () => {
 
   const [profile, setProfile] = useState({
     first_name: "",
+    middle_name: "",
     last_name: "",
     email: "",
     user_role: "",
@@ -21,6 +22,7 @@ const MyProfile = () => {
 
   const [editData, setEditData] = useState({
     first_name: "",
+    middle_name: "",
     last_name: "",
   });
 
@@ -41,22 +43,33 @@ const MyProfile = () => {
 
         let firstName = "";
         let lastName = "";
+        let middleName = "";
         let municipality = "";
 
         if (data.municipal_agriculturist) {
           firstName = data.municipal_agriculturist.first_name || "";
+          middleName = data.municipal_agriculturist.middle_name || "";
           lastName = data.municipal_agriculturist.last_name || "";
           municipality = data.municipal_agriculturist.municipality || "";
         } else if (data.provincial_agriculturist) {
           firstName = data.provincial_agriculturist.first_name || "";
+          middleName = data.provincial_agriculturist.middle_name || "";
           lastName = data.provincial_agriculturist.last_name || "";
         } else if (data.admin_profile) {
           firstName = data.admin_profile.first_name || "";
+          middleName = data.admin_profile.middle_name || "";
           lastName = data.admin_profile.last_name || "";
         }
 
+        // Fallback: some roles (e.g., admin) don't include nested profile in this endpoint
+        // AuthContext user (from /protected/) already contains names; use them if empty
+        if (!firstName && user?.first_name) firstName = user.first_name;
+        if (!middleName && user?.middle_name) middleName = user.middle_name;
+        if (!lastName && user?.last_name) lastName = user.last_name;
+
         const base = {
           first_name: firstName,
+          middle_name: middleName,
           last_name: lastName,
           email: data.email || "",
           user_role: data.user_role || "",
@@ -64,7 +77,7 @@ const MyProfile = () => {
         };
 
         setProfile(base);
-        setEditData({ first_name: firstName, last_name: lastName });
+        setEditData({ first_name: firstName, middle_name: middleName, last_name: lastName });
         setLoading(false);
       } catch (err) {
         console.error("Failed to load profile", err);
@@ -94,6 +107,7 @@ const MyProfile = () => {
 
       const payload = {
         first_name: editData.first_name,
+        middle_name: editData.middle_name,
         last_name: editData.last_name,
       };
 
@@ -108,6 +122,7 @@ const MyProfile = () => {
       setProfile((prev) => ({
         ...prev,
         first_name: editData.first_name,
+        middle_name: editData.middle_name,
         last_name: editData.last_name,
       }));
       setMode("view");
@@ -169,6 +184,7 @@ const MyProfile = () => {
                 onClick={() => {
                   setEditData({
                     first_name: profile.first_name,
+                    middle_name: profile.middle_name,
                     last_name: profile.last_name,
                   });
                   setError(null);
@@ -210,11 +226,17 @@ const MyProfile = () => {
             )}
           </div>
           {mode === "view" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <p className="text-sm font-medium text-gray-700">First Name</p>
                 <p className="mt-1 text-base font-semibold text-gray-900">
                   {profile.first_name || "Not provided"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700">Middle Name</p>
+                <p className="mt-1 text-base font-semibold text-gray-900">
+                  {profile.middle_name || "Not provided"}
                 </p>
               </div>
               <div>
@@ -240,7 +262,7 @@ const MyProfile = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     First Name
@@ -249,6 +271,19 @@ const MyProfile = () => {
                     type="text"
                     name="first_name"
                     value={editData.first_name}
+                    onChange={handleEditChange}
+                    className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Middle Name
+                  </label>
+                  <input
+                    type="text"
+                    name="middle_name"
+                    value={editData.middle_name}
                     onChange={handleEditChange}
                     className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                     required

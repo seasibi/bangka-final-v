@@ -8,6 +8,9 @@ import { getFisherfolkReport, getBoatReport, getBoundaryViolationReport } from '
 import useMunicipalities from '../../hooks/useMunicipalities';
 import { getSignatories } from '../../services/signatoriesService';
 import { useAuth } from '../../contexts/AuthContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import logo from '../../assets/logo.png';
 
 const MunicipalReportGeneration = () => {
   const navigate = useNavigate();
@@ -86,6 +89,20 @@ const MunicipalReportGeneration = () => {
       } else if (reportType === 'Boundary Violation Report') {
         data = await getBoundaryViolationReport();
       }
+
+      // Scope to Municipal Agriculturist's municipality
+      if (user?.user_role === 'municipal_agriculturist' && user?.municipality) {
+        const muni = user.municipality;
+        const sameMuni = (val) => normalizeMunicipality(val) === normalizeMunicipality(muni);
+        if (reportType === 'Fisherfolk Report') {
+          data = (Array.isArray(data) ? data : []).filter(item => sameMuni(item?.address?.municipality));
+        } else if (reportType === 'Boat Registry Report') {
+          data = (Array.isArray(data) ? data : []).filter(item => sameMuni(item?.fisherfolk_registration_number?.address?.municipality));
+        } else if (reportType === 'Boundary Violation Report') {
+          data = (Array.isArray(data) ? data : []).filter(item => sameMuni(item?.from_municipality) || sameMuni(item?.to_municipality));
+        }
+      }
+
       setReportData(data);
     } catch (error) {
       console.error('Error fetching report data:', error);
@@ -190,22 +207,12 @@ const MunicipalReportGeneration = () => {
   };
 
   const handleGenerateReport = () => {
-    const printWindow = window.open('', '_blank');
-    const printContent = generatePrintContent();
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-  };
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const margin = 40;
+    const headerHeight = 120;
+    const logoWidth = 80;
+    const logoHeight = 80;
 
-  const generatePrintContent = () => {
-    const currentDate = new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    let tableHeaders = '';
-    let tableRows = '';
     const heading = (
       reportType === 'Fisherfolk Report' ? 'Fisherfolk Report' :
       reportType === 'Boat Registry Report' ? 'Boat Registry Report' :
@@ -213,189 +220,158 @@ const MunicipalReportGeneration = () => {
       String(reportType || 'Report')
     );
 
-    if (reportType === 'Fisherfolk Report') {
-      tableHeaders = `
-        <th class="px-4 py-3 text-left">Registration Number</th>
-        <th class="px-4 py-3 text-left">Municipality</th>
-        <th class="px-4 py-3 text-left">Barangay</th>
-        <th class="px-4 py-3 text-left">Name</th>
-        <th class="px-4 py-3 text-left">Main Source of Livelihood</th>
-      `;
-      tableRows = processedData.map(item => `
-        <tr class="border-b">
-          <td class="px-4 py-2">${item.registration_number || 'N/A'}</td>
-          <td class="px-4 py-2">${item.address?.municipality || 'N/A'}</td>
-          <td class="px-4 py-2">${item.address?.barangay || 'N/A'}</td>
-          <td class="px-4 py-2">${item.first_name} ${item.middle_name || ''} ${item.last_name}</td>
-          <td class="px-4 py-2">${item.main_source_livelihood || 'N/A'}</td>
-        </tr>
-      `).join('');
-    } else if (reportType === 'Boat Registry Report') {
-      tableHeaders = `
-        <th class="px-4 py-3 text-left">MFBR Number</th>
-        <th class="px-4 py-3 text-left">Boat Name</th>
-        <th class="px-4 py-3 text-left">Owner Name</th>
-        <th class="px-4 py-3 text-left">Boat Type</th>
-        <th class="px-4 py-3 text-left">Tracker Assignment</th>
-      `;
-      tableRows = processedData.map(item => {
-        const owner = item.fisherfolk_registration_number;
-        return `
-          <tr class="border-b">
-            <td class="px-4 py-2">${item.mfbr_number || 'N/A'}</td>
-            <td class="px-4 py-2">${item.boat_name || 'N/A'}</td>
-            <td class="px-4 py-2">${owner ? `${owner.first_name} ${owner.middle_name || ''} ${owner.last_name}` : 'N/A'}</td>
-            <td class="px-4 py-2">${item.type_of_boat || 'N/A'}</td>
-            <td class="px-4 py-2">${item.tracker ? 'Assigned' : 'Unassigned'}</td>
-          </tr>
-        `;
-      }).join('');
-    } else if (reportType === 'Boundary Violation Report') {
-      tableHeaders = `
-        <th class="px-4 py-3 text-left">MFBR Number</th>
-        <th class="px-4 py-3 text-left">Boat Name</th>
-        <th class="px-4 py-3 text-left">Owner Name</th>
-        <th class="px-4 py-3 text-left">Municipality From</th>
-        <th class="px-4 py-3 text-left">Municipality To</th>
-        <th class="px-4 py-3 text-left">Reason</th>
-        <th class="px-4 py-3 text-left">Status</th>
-      `;
-      tableRows = processedData.map(item => {
-        const fishermanName = typeof item.fisherfolk === 'object' && item.fisherfolk
-          ? `${item.fisherfolk.first_name || ''} ${item.fisherfolk.middle_name || ''} ${item.fisherfolk.last_name || ''}`.trim()
-          : item.fisherfolk || 'N/A';
-        return `
-        <tr class="border-b">
-          <td class="px-4 py-2">${item.mfbr_number || 'N/A'}</td>
-          <td class="px-4 py-2">${item.boat_name || 'N/A'}</td>
-          <td class="px-4 py-2">${fishermanName}</td>
-          <td class="px-4 py-2">${item.from_municipality || 'N/A'}</td>
-          <td class="px-4 py-2">${item.to_municipality || 'N/A'}</td>
-          <td class="px-4 py-2">${item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} minutes` : 'N/A'}</td>
-          <td class="px-4 py-2">
-            ${(() => {
-              const rs = String(item.report_status || '');
-              const label = rs === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : rs === 'Resolved' ? 'Resolved' : 'Report Pending';
-              const cls = rs === 'Fisherfolk Reported' ? 'text-green-600' : rs === 'Resolved' ? 'text-gray-600' : 'text-yellow-600';
-              return `<span class=\"${cls}\">${label}</span>`;
-            })()}
-          </td>
-        </tr>
-      `}).join('');
-    }
+    const logoImg = new Image();
+    logoImg.src = logo;
 
-    const sigCurrent = signatories.current ? formatUpperName(signatories.current.first_name, signatories.current.middle_name, signatories.current.last_name) : '';
-    const sigMA = signatories.municipalAgri ? `${signatories.municipalAgri.first_name || ''} ${signatories.municipalAgri.middle_name || ''} ${signatories.municipalAgri.last_name || ''}`.trim().toUpperCase() : '';
-    const sigMayor = signatories.mayor ? `${signatories.mayor.first_name || ''} ${signatories.mayor.middle_name || ''} ${signatories.mayor.last_name || ''}`.trim().toUpperCase() : '';
-
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title></title>
-        <style>
-          :root {
-            --primary: #2563EB;
-            --footer-offset: 110px;
-          }
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          html, body { height: 100%; }
-          body { font-family: 'Arial', sans-serif; background: white; }
-          .page { min-height: 100vh; display: flex; flex-direction: column; padding: 40px; }
-          .header { display: flex; align-items: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 20px; }
-          .logo { width: 80px; height: 80px; margin-right: 20px; }
-          .header-text h1 { font-size: 20px; font-weight: bold; margin-bottom: 5px; }
-          .header-text p { font-size: 12px; line-height: 1.5; }
-          .report-title { text-align: center; font-size: 22px; font-weight: 700; margin: 26px 0 16px; color: #111827; position: relative; z-index: 1; }
-          .content { flex: 1 0 auto; display: block; }
-          .section-title { background: #DBEAFE; color: #1D4ED8; font-weight: 600; padding: 6px 8px; border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
-          .card { border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; }
-          thead tr { background-color: var(--primary); color: #fff; }
-          th { padding: 12px; text-align: left; font-weight: 600; font-size: 12px; }
-          td { padding: 10px; border-bottom: 1px solid #E5E7EB; font-size: 12px; }
-          tr:nth-child(even) { background-color: #F9FAFB; }
-          .footer { margin-top: 24px; padding-top: 8px; text-align: center; font-size: 12px; color: #666; background: #fff; }
-          .signatories { margin-top: 28px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
-          .sig-block { text-align: center; }
-          .sig-line { margin-top: 48px; border-top: 1px solid #111; padding-top: 6px; font-weight: 600; }
-          .sig-title { font-size: 12px; color: #444; }
-          @media print {
-            @page { size: A4; margin: 1cm; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page { padding: 0 1cm; min-height: 100vh; display: flex; flex-direction: column; }
-            .header { position: static; background: white; z-index: 1; }
-            .report-title { margin-top: 12px; }
-            .content { margin-top: 8px; margin-bottom: var(--footer-offset); flex: 1 1 auto; }
-            .footer { position: fixed; bottom: 1cm; left: 1cm; right: 1cm; margin-top: 0; }
-            thead { display: table-header-group; }
-            tfoot { display: table-footer-group; }
-            tr { page-break-inside: avoid; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page">
-          <div class="header">
-            <img src="/src/assets/logo.png" alt="Logo" class="logo" onerror="this.style.display='none'">
-            <div class="header-text">
-              <h1>Office of the Provincial Agriculturist - Fisheries Section</h1>
-              <p>
-                Provincial Agriculturist Office, Aguila Road, Brgy. II<br>
-                City of San Fernando, La Union 2500<br>
-                Phone: (072) 888-3184 / 607-4492 / 607-4488<br>
-                Email: opaglaunion@yahoo.com
-              </p>
-            </div>
-          </div>
-
-          <div class="report-title">${heading}</div>
-
-          <div class="content">
-            <div class="card">
-              <table>
-              <thead>
-                <tr>${tableHeaders}</tr>
-              </thead>
-              <tbody>
-                ${tableRows}
-              </tbody>
-              <tfoot>
-                <tr><td colspan="999" style="height: var(--footer-offset);"></td></tr>
-              </tfoot>
-              </table>
-            </div>
-            <div class="signatories">
-              <div class="sig-block">
-                <div class="sig-line">${sigCurrent || '&nbsp;'}</div>
-                <div class="sig-title">Municipal Agriculturist</div>
-              </div>
-              <div class="sig-block">
-                <div class="sig-line">${sigMA || '&nbsp;'}</div>
-                <div class="sig-title">Municipal Agriculturist</div>
-              </div>
-              <div class="sig-block">
-                <div class="sig-line">${sigMayor || '&nbsp;'}</div>
-                <div class="sig-title">Municipal Mayor</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <p>Date Generated: ${currentDate}</p>
-            <p>&copy; ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section</p>
-          </div>
-        </div>
-      </body>
-      <script>
-        window.addEventListener('load', function () {
-          setTimeout(function(){ window.print(); }, 50);
+    const buildColumnsAndRows = () => {
+      if (reportType === 'Fisherfolk Report') {
+        const columns = [
+          { header: 'Registration #', dataKey: 'reg' },
+          { header: 'Municipality', dataKey: 'municipality' },
+          { header: 'Barangay', dataKey: 'barangay' },
+          { header: 'Name', dataKey: 'name' },
+          { header: 'Main Livelihood', dataKey: 'livelihood' },
+        ];
+        const rows = processedData.map(item => ({
+          reg: item.registration_number || 'N/A',
+          municipality: item.address?.municipality || 'N/A',
+          barangay: item.address?.barangay || 'N/A',
+          name: `${item.first_name} ${item.middle_name || ''} ${item.last_name}`.replace(/\s+/g,' ').trim(),
+          livelihood: item.main_source_livelihood || 'N/A',
+        }));
+        return { columns, rows };
+      }
+      if (reportType === 'Boat Registry Report') {
+        const columns = [
+          { header: 'MFBR #', dataKey: 'mfbr' },
+          { header: 'Boat Name', dataKey: 'boat' },
+          { header: 'Owner Name', dataKey: 'owner' },
+          { header: 'Boat Type', dataKey: 'type' },
+          { header: 'Tracker', dataKey: 'tracker' },
+        ];
+        const rows = processedData.map(item => {
+          const ff = item.fisherfolk_registration_number;
+          const owner = ff ? `${ff.first_name} ${ff.middle_name || ''} ${ff.last_name}`.replace(/\s+/g,' ').trim() : 'N/A';
+          return {
+            mfbr: item.mfbr_number || 'N/A',
+            boat: item.boat_name || 'N/A',
+            owner,
+            type: item.type_of_boat || 'N/A',
+            tracker: item.tracker ? 'Assigned' : 'Unassigned',
+          };
         });
-      </script>
-      </html>
-    `;
+        return { columns, rows };
+      }
+      // Boundary Violation
+      const columns = [
+        { header: 'MFBR #', dataKey: 'mfbr' },
+        { header: 'Boat Name', dataKey: 'boat' },
+        { header: 'Owner Name', dataKey: 'owner' },
+        { header: 'From', dataKey: 'from' },
+        { header: 'To', dataKey: 'to' },
+        { header: 'Reason/Duration', dataKey: 'reason' },
+        { header: 'Status', dataKey: 'status' },
+      ];
+      const rows = processedData.map(item => {
+        const fishermanName = typeof item.fisherfolk === 'object' && item.fisherfolk
+          ? `${item.fisherfolk.first_name || ''} ${item.fisherfolk.middle_name || ''} ${item.fisherfolk.last_name || ''}`.replace(/\s+/g,' ').trim()
+          : (item.fisherfolk || 'N/A');
+        return {
+          mfbr: item.mfbr_number || 'N/A',
+          boat: item.boat_name || 'N/A',
+          owner: fishermanName,
+          from: item.from_municipality || 'N/A',
+          to: item.to_municipality || 'N/A',
+          reason: item.dwell_duration ? `${Math.round(item.dwell_duration / 60)} min` : (item.reason || 'N/A'),
+          status: item.report_status === 'Fisherfolk Reported' ? 'Fisherfolk Reported' : item.report_status === 'Resolved' ? 'Resolved' : 'Report Pending',
+        };
+      });
+      return { columns, rows };
+    };
+
+    const { columns, rows } = buildColumnsAndRows();
+
+    const titleY = headerHeight + 30;
+    const dateY = titleY + 24 + 6;
+    const tableStartY = dateY + 20;
+
+    autoTable(doc, {
+      startY: tableStartY,
+      head: [columns.map(c => c.header)],
+      body: rows.map(r => columns.map(c => r[c.dataKey])),
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 4 },
+      headStyles: { fillColor: [37, 99, 235], textColor: 255 },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      margin: { left: margin, right: margin },
+      theme: 'striped',
+      didDrawPage: (data) => {
+        // Header (first page only)
+        const pageNumber = doc.internal.getCurrentPageInfo ? doc.internal.getCurrentPageInfo().pageNumber : doc.internal.getNumberOfPages();
+        if (pageNumber === 1) {
+          try { doc.addImage(logoImg, 'PNG', margin, 20, logoWidth, logoHeight); } catch (e) {}
+          doc.setFontSize(16); doc.setFont('helvetica','bold');
+          doc.text('Office of the Provincial Agriculturist - Fisheries Section', margin + logoWidth + 20, 40);
+          doc.setFontSize(10); doc.setFont('helvetica','normal');
+          doc.text('Provincial Agriculturist Office, Aguila Road, Brgy. II', margin + logoWidth + 20, 60);
+          doc.text('City of San Fernando, La Union 2500', margin + logoWidth + 20, 74);
+          doc.text('Phone: (072) 888-3184 / 607-4492 / 607-4488', margin + logoWidth + 20, 88);
+          doc.text('Email: opaglaunion@yahoo.com', margin + logoWidth + 20, 102);
+          doc.setLineWidth(1); doc.line(margin, headerHeight, doc.internal.pageSize.getWidth() - margin, headerHeight);
+          // Title
+          const pw = doc.internal.pageSize.getWidth();
+          doc.setFontSize(24); doc.setFont('helvetica','bold');
+          doc.text(heading, pw/2, titleY, { align: 'center' });
+        }
+        // Footer (copyright left, date right)
+        doc.setFontSize(10);
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const leftX = data.settings.margin.left;
+        const rightX = pageW - data.settings.margin.left;
+        const footY = pageH - 20;
+        doc.text(`  ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`, leftX, footY);
+        doc.text(`Date generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, rightX, footY, { align: 'right' });
+      },
+    });
+
+    // Signatories block on last page
+    const lastPage = doc.internal.getNumberOfPages();
+    doc.setPage(lastPage);
+    const pw = doc.internal.pageSize.getWidth();
+    const ph = doc.internal.pageSize.getHeight();
+    const blockTop = ph - 120; // above footer
+    const colW = (pw - margin*2) / 3;
+    const x0 = margin;
+    const x1 = margin + colW;
+    const x2 = margin + colW*2;
+    const roleLabel = 'Municipal Agriculturist';
+
+    const preparedName = user ? `${user.first_name || ''} ${user.middle_name ? user.middle_name.charAt(0)+'. ' : ''}${user.last_name || ''}`.replace(/\s+/g,' ').trim().toUpperCase() : '';
+    const userRegisteredPosition = user?.municipal_agriculturist?.position || user?.position || '';
+    const preparedTitle = user?.user_role === 'municipal_agriculturist'
+      ? `Municipal Agriculturist${userRegisteredPosition ? ` - ${userRegisteredPosition}` : ''}`
+      : 'Prepared by';
+
+    const maName = signatories.municipalAgri ? `${signatories.municipalAgri.first_name || ''} ${signatories.municipalAgri.middle_name ? signatories.municipalAgri.middle_name.charAt(0)+'. ' : ''}${signatories.municipalAgri.last_name || ''}`.replace(/\s+/g,' ').trim().toUpperCase() : '';
+    const mayorName = signatories.mayor ? `${signatories.mayor.first_name || ''} ${signatories.mayor.middle_name ? signatories.mayor.middle_name.charAt(0)+'. ' : ''}${signatories.mayor.last_name || ''}`.replace(/\s+/g,' ').trim().toUpperCase() : '';
+
+    const drawSig = (x, title, name) => {
+      doc.setLineWidth(1); doc.line(x, blockTop+40, x+colW-20, blockTop+40);
+      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text(name || ' ', x + (colW-20)/2, blockTop+54, { align: 'center' });
+      doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(title, x + (colW-20)/2, blockTop+70, { align: 'center' });
+    };
+    drawSig(x0, preparedTitle, preparedName);
+    drawSig(x1, 'Municipal Agriculturist', maName);
+    drawSig(x2, 'Municipal Mayor', mayorName);
+
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const w = window.open(url, '_blank');
+    if (w) {
+      w.onload = () => {
+        try { w.focus(); w.print(); } catch (e) {}
+      };
+    }
   };
 
   return (
@@ -636,28 +612,6 @@ const MunicipalReportGeneration = () => {
 
                   <div className="mt-8 text-center text-sm text-gray-500">
                     <p>Date Generated: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                  </div>
-
-                  {/* Signatories */}
-                  <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="text-center">
-                      <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                        {(signatories.current && formatUpperName(signatories.current.first_name, signatories.current.middle_name, signatories.current.last_name)) || '\u00A0'}
-                      </div>
-                      <div className="text-xs text-gray-600">Municipal Agriculturist</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                        {(signatories.municipalAgri && `${signatories.municipalAgri.first_name || ''} ${signatories.municipalAgri.middle_name || ''} ${signatories.municipalAgri.last_name || ''}`.trim().toUpperCase()) || '\u00A0'}
-                      </div>
-                      <div className="text-xs text-gray-600">Municipal Agriculturist</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="mt-12 border-t border-gray-900 pt-2 font-semibold">
-                        {(signatories.mayor && `${signatories.mayor.first_name || ''} ${signatories.mayor.middle_name || ''} ${signatories.mayor.last_name || ''}`.trim().toUpperCase()) || '\u00A0'}
-                      </div>
-                      <div className="text-xs text-gray-600">Municipal Mayor</div>
-                    </div>
                   </div>
                 </>
               )}
