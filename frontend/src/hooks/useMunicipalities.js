@@ -22,13 +22,27 @@ export const useMunicipalities = () => {
       
       // Create a mapping of municipality name to prefix
       const prefixMap = {};
+      console.log('📍 Municipalities loaded:');
       sorted.forEach(muni => {
-        console.log(`Municipality: ${muni.name}, Prefix: ${muni.prefix}`);
+        const coastalMark = muni.is_coastal ? '🌊' : '🏔️';
+        console.log(`${coastalMark} ${muni.name} - Prefix: ${muni.prefix}, Coastal: ${muni.is_coastal}`);
         if (muni.prefix) {
           prefixMap[muni.name] = muni.prefix;
         }
       });
       console.log('Final Prefix Map:', prefixMap);
+      
+      // Check for San Gabriel specifically
+      const sanGabriel = sorted.find(m => m.name === 'San Gabriel');
+      if (sanGabriel) {
+        console.log('🔍 San Gabriel Status:', {
+          name: sanGabriel.name,
+          is_coastal: sanGabriel.is_coastal,
+          prefix: sanGabriel.prefix,
+          will_show_in_tracker_add: sanGabriel.is_coastal === true
+        });
+      }
+      
       setMunicipalityPrefixes(prefixMap);
     } catch (err) {
       console.error('Error fetching municipalities:', err);
