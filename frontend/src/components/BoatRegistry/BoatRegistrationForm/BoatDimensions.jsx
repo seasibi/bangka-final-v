@@ -5,8 +5,8 @@ import { IoCloudUploadOutline } from 'react-icons/io5';
 const BoatDimensions = ({ formData, onChange }) => {
   const limits = {
     registered_length: { min: 20, max: 25 },
-    registered_breadth: { min: 16, max: 20 },
-    registered_depth: { min: 20, max: 26 },
+    registered_breadth: { min: 0.75, max: 0.8 },
+    registered_depth: { min: 0.75, max: 0.8 },
   };
 
   const handleNumericChange = (e) => {
@@ -23,7 +23,7 @@ const BoatDimensions = ({ formData, onChange }) => {
     const { min, max } = limits[name];
     if (!isNaN(numValue)) {
       // Clamp value to min/max
-      let clamped = Math.max(min, Math.min(max, numValue));
+      const clamped = Math.max(min, Math.min(max, numValue));
       if (clamped !== numValue) {
         // If out of bounds, set to clamped value
         e.target.value = clamped;
@@ -58,6 +58,7 @@ const BoatDimensions = ({ formData, onChange }) => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                 required
               />
+              <p className="mt-1 text-xs text-gray-500">Allowed range: 2025 meters.</p>
             </div>
           </div>
 
@@ -71,12 +72,13 @@ const BoatDimensions = ({ formData, onChange }) => {
                 name="registered_breadth"
                 value={formData.registered_breadth}
                 onChange={handleNumericChange}
-                min="16"
-                max="20"
-                step="1"
+                min="0.75"
+                max="0.8"
+                step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                 required
               />
+              <p className="mt-1 text-xs text-gray-500">Allowed range: 0.750.80 meters.</p>
             </div>
           </div>
 
@@ -90,9 +92,9 @@ const BoatDimensions = ({ formData, onChange }) => {
                 name="registered_depth"
                 value={formData.registered_depth}
                 onChange={handleNumericChange}
-                min="20"
-                max="26"
-                step="1"
+                min="0.75"
+                max="0.8"
+                step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                 required
               />

@@ -81,7 +81,7 @@ const Header = ({ onShowLogout, showUserInfo = true }) => {
           )}
         </div>
 
-        {user && (
+        {user && showUserInfo && (
           <div className="ml-2 relative">
             <button
               onClick={(e) => {

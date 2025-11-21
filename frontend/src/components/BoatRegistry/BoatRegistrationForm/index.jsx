@@ -6,6 +6,7 @@ import { GEAR_MAP } from "../../../constants/gearMap";
 import FisherfolkSearchForm from "../FisherfolkSearchForm";
 import RegistrationDetails from "./RegistrationDetails";
 import { getMunicipalities } from "../../../services/municipalityService";
+import { useAuth } from "../../../contexts/AuthContext";
 
 // Normalize municipality names for comparison (treat aliases equally, case-insensitive)
 const normalizeMunicipality = (name) => {
@@ -60,6 +61,8 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
   const location = useLocation();
   const fisherfolkFromState = location.state?.fisherfolk;
   const initialFromNav = location?.state?.initialData;
+
+  const { user } = useAuth();
 
   const [currentStep, setCurrentStep] = useState(
     initialData.fisherfolk_registration_number ? 1 : 0
@@ -193,13 +196,13 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       // store file object in formData
       setFormData((prev) => ({
         ...prev,
-        boat_image: file, // ✅ real file, not base64
+        boat_image: file, // real file, not base64
       }));
 
       // generate preview (without touching formData)
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreview(reader.result); // ✅ base64 only for preview
+        setPreview(reader.result); // base64 only for preview
       };
       reader.readAsDataURL(file);
     }
@@ -211,6 +214,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     const fetchLatestFisherfolk = async () => {
       try {
         const allFisherfolk = await getFisherfolk();
+
         // Define coastal municipalities
         const coastalMunicipalities = [
           "Agoo", "Aringay", "Bacnotan", "Balaoan", "Bangar",
@@ -237,12 +241,22 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
         const fisherfolkWithAddresses = await Promise.all(addressPromises);
 
         // Filter by coastal municipalities and sort
-        const latest = fisherfolkWithAddresses
+        let latest = fisherfolkWithAddresses
           .filter(f => {
             const municipality = f.address?.municipality || f.municipality;
             const isCoastal = muniInList(municipality, coastalMunicipalities);
             return isCoastal;
-          })
+          });
+
+        // If logged-in user is a Municipal Agriculturist, restrict to their municipality
+        if (user?.user_role === "municipal_agriculturist" && user?.municipality) {
+          latest = latest.filter(f => {
+            const municipality = f.address?.municipality || f.municipality;
+            return muniInList(municipality, [user.municipality]);
+          });
+        }
+
+        latest = latest
           .sort((a, b) => new Date(b.date_added) - new Date(a.date_added))
           .slice(0, 8);
         setLatestFisherfolk(latest);
@@ -251,7 +265,7 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       }
     };
     fetchLatestFisherfolk();
-  }, []);
+  }, [user]);
 
   // Municipality codes mapping
   const municipalityCodes = {
@@ -898,13 +912,42 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
     }
   };
 
+  const dimensionLimits = {
+    registered_length: { min: 20, max: 25 },
+    registered_breadth: { min: 0.75, max: 0.8 },
+    registered_depth: { min: 0.75, max: 0.8 },
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked, files } = e.target;
-    // Restrict tonnage fields to 0-3
+
+    // Restrict registered dimensions
+    if (["registered_length", "registered_breadth", "registered_depth"].includes(name)) {
+      let numValue = parseFloat(value);
+      if (isNaN(numValue)) {
+        numValue = "";
+      } else {
+        const limits = dimensionLimits[name];
+        if (limits) {
+          const { min, max } = limits;
+          if (typeof min === "number" && typeof max === "number") {
+            numValue = Math.max(min, Math.min(max, numValue));
+          }
+        }
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        [name]: numValue === "" ? "" : numValue,
+      }));
+      return;
+    }
+
+    // Restrict tonnage fields to 1-3
     if (["tonnage_length", "tonnage_breadth", "tonnage_depth"].includes(name)) {
       let numValue = parseFloat(value);
       if (isNaN(numValue)) numValue = "";
-      else if (numValue < 0) numValue = 0;
+      else if (numValue < 1) numValue = 1;
       else if (numValue > 3) numValue = 3;
 
       // Update form data with the new tonnage value
@@ -1657,8 +1700,14 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter length"
                     required
-                    step="0.01"
+                    min="20"
+                    max="25"
+                    step="1"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Allowed range: 20–25 meters.</p>
+                  {errors.registered_length && (
+                    <span className="mt-1 text-xs text-red-600 block">{errors.registered_length}</span>
+                  )}
                 </div>
               </div>
               <div className="row-start-2">
@@ -1674,8 +1723,14 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter breadth"
                     required
+                    min="0.75"
+                    max="0.8"
                     step="0.01"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Allowed range: 0.75–0.80 meters.</p>
+                  {errors.registered_breadth && (
+                    <span className="mt-1 text-xs text-red-600 block">{errors.registered_breadth}</span>
+                  )}
                 </div>
               </div>
               <div className="row-start-3">
@@ -1691,8 +1746,14 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter depth"
                     required
+                    min="0.75"
+                    max="0.8"
                     step="0.01"
                   />
+                  <p className="mt-1 text-xs text-gray-500">Allowed range: 0.75–0.80 meters.</p>
+                  {errors.registered_depth && (
+                    <span className="mt-1 text-xs text-red-600 block">{errors.registered_depth}</span>
+                  )}
                 </div>
               </div>
 
@@ -1715,12 +1776,16 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                       value={formData.tonnage_length}
                       onChange={handleInputChange}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 col-span-2"
-                      min={0}
+                      min={1}
                       max={3}
                       placeholder="Enter Tonnage Length"
                       required
                       step="1"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Allowed range: 1–3.</p>
+                    {errors.tonnage_length && (
+                      <span className="mt-1 text-xs text-red-600 block">{errors.tonnage_length}</span>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-3">
@@ -1734,12 +1799,16 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                       value={formData.tonnage_breadth}
                       onChange={handleInputChange}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 col-span-2"
-                      min={0}
+                      min={1}
                       max={3}
                       placeholder="Enter Tonnage Breadth"
                       required
                       step="1"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Allowed range: 1–3.</p>
+                    {errors.tonnage_breadth && (
+                      <span className="mt-1 text-xs text-red-600 block">{errors.tonnage_breadth}</span>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-3">
@@ -1753,12 +1822,16 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
                       value={formData.tonnage_depth}
                       onChange={handleInputChange}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 col-span-2"
-                      min={0}
+                      min={1}
                       max={3}
                       placeholder="Enter Tonnage Depth"
                       required
                       step="1"
                     />
+                    <p className="mt-1 text-xs text-gray-500">Allowed range: 1–3.</p>
+                    {errors.tonnage_depth && (
+                      <span className="mt-1 text-xs text-red-600 block">{errors.tonnage_depth}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -6171,7 +6244,10 @@ const BoatRegistrationForm = ({ onSubmit, initialData, anotherAction }) => {
       {/* Confirm Modal */}
       <ConfirmModal
         isOpen={showConfirmModal}
-        onClose={() => setShowConfirmModal(false)}
+        onClose={() => {
+          setShowConfirmModal(false);
+          setCurrentStep(2);
+        }}
         onConfirm={handleConfirmSubmit}
         title="Confirm Boat Registration"
         message="Are you sure you want to register this boat?"

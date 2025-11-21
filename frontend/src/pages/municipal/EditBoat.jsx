@@ -478,10 +478,11 @@ const EditBoat = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked, files } = e.target;
+    // Restrict tonnage fields to 1-3
     if (["tonnage_length", "tonnage_breadth", "tonnage_depth"].includes(name)) {
       let numValue = parseFloat(value);
       if (isNaN(numValue)) numValue = "";
-      else if (numValue < 0) numValue = 0;
+      else if (numValue < 1) numValue = 1;
       else if (numValue > 3) numValue = 3;
       setFormData((prev) => ({
         ...prev,

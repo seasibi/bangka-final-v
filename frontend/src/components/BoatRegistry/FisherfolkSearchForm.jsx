@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import PropTypes from "prop-types";
 import { apiClient } from "../../services/api_urls";
+import { useAuth } from "../../contexts/AuthContext";
 
 // Normalize municipality names for comparison (treat aliases equally, case-insensitive)
 const normalizeMunicipality = (name) => {
@@ -21,6 +22,7 @@ const muniInList = (name, list) => {
 };
 
 const FisherfolkSearchForm = ({ onSelectFisherfolk, selectedFisherfolkId }) => {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [fisherfolks, setFisherfolks] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -69,14 +71,26 @@ const FisherfolkSearchForm = ({ onSelectFisherfolk, selectedFisherfolkId }) => {
         });
         setAddressMap(newAddressMap);
 
-        // Now filter only fisherfolk from coastal municipalities
-        // Check address municipality from the addressMap we just built
+        // Base filter: only fisherfolk from coastal municipalities
         const coastalFisherfolk = response.data.filter(f => {
           const addressMunicipality = newAddressMap[f.registration_number]?.municipality;
           const municipality = f.municipality || addressMunicipality;
           return muniInList(municipality, coastalMunicipalities);
         });
-        setFisherfolks(coastalFisherfolk);
+
+        // If logged-in user is a Municipal Agriculturist, narrow further to their municipality
+        let filtered = coastalFisherfolk;
+        const userRole = user?.user_role;
+        const userMunicipality = user?.municipality;
+        if (userRole === "municipal_agriculturist" && userMunicipality) {
+          filtered = coastalFisherfolk.filter(f => {
+            const addressMunicipality = newAddressMap[f.registration_number]?.municipality;
+            const municipality = f.municipality || addressMunicipality;
+            return muniInList(municipality, [userMunicipality]);
+          });
+        }
+
+        setFisherfolks(filtered);
       }
     } catch (error) {
       console.error("Error searching fisherfolk:", error);
@@ -84,7 +98,7 @@ const FisherfolkSearchForm = ({ onSelectFisherfolk, selectedFisherfolkId }) => {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm]);
+  }, [searchTerm, user]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -121,11 +135,18 @@ const FisherfolkSearchForm = ({ onSelectFisherfolk, selectedFisherfolkId }) => {
   };
 
   // Filter fisherfolks to match only from the start of the fields
-  const filteredFisherfolks = fisherfolks.filter((f) =>
+  let filteredFisherfolks = fisherfolks.filter((f) =>
     f.first_name?.toLowerCase().startsWith(searchTerm.toLowerCase()) ||
     f.last_name?.toLowerCase().startsWith(searchTerm.toLowerCase()) ||
     (f.registration_number || "").toLowerCase().startsWith(searchTerm.toLowerCase())
   );
+
+  // Final safeguard: if the user is a Municipal Agriculturist, enforce municipality match
+  if (user?.user_role === "municipal_agriculturist" && user?.municipality) {
+    filteredFisherfolks = filteredFisherfolks.filter((f) =>
+      muniInList(f.municipality || addressMap[f.registration_number]?.municipality, [user.municipality])
+    );
+  }
 
   return (
     <div className="" style={{ fontFamily: "Montserrat, sans-serif" }} >
