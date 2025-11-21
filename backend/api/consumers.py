@@ -75,7 +75,7 @@ class GPSConsumer(AsyncWebsocketConsumer):
             # Build dictionary keyed by consistent identifier:
             # prefer MFBR; else tracker_id; else namespaced boat_id
             latest_positions = {}
-            threshold_seconds = 300  # 5 minutes
+            threshold_seconds = 480  # 8 minutes as per requirement
             now = timezone.now()
             
             # Cache for TrackerStatusEvent lookups to avoid duplicate queries
@@ -174,7 +174,11 @@ class GPSConsumer(AsyncWebsocketConsumer):
                     # Get the most recent status event for this tracker
                     last_status_event = TrackerStatusEvent.objects.filter(tracker_id=tracker_id).order_by('-timestamp').first()
                     if last_status_event:
-                        status_cache[tracker_id] = last_status_event.status
+                        # Only use online/offline status, skip reconnecting/reconnected
+                        if last_status_event.status in ['online', 'offline']:
+                            status_cache[tracker_id] = last_status_event.status
+                        else:
+                            status_cache[tracker_id] = None
                     else:
                         status_cache[tracker_id] = None
                 
@@ -183,12 +187,6 @@ class GPSConsumer(AsyncWebsocketConsumer):
                 else:
                     # Fallback to age-based status if no TrackerStatusEvent exists
                     status = "online" if age_seconds <= threshold_seconds else "offline"
-
-                # Override: if last GPS fix is older than threshold, force offline even if
-                # the last TrackerStatusEvent was online/reconnecting, so live map matches
-                # the age-based offline behavior.
-                if age_seconds > threshold_seconds and status != "offline":
-                    status = "offline"
                 
                 in_violation = False
                 if resolved_mfbr and resolved_mfbr in active_mfbrs:

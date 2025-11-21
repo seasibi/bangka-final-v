@@ -37,7 +37,7 @@ const MABirukBilugTracking = () => {
 
         {/* Map Container */}
         <div className="relative w-full h-[50vh] sm:h-[60vh] md:h-[65vh] lg:h-[70vh] xl:h-[70vh] 2xl:h-[76vh] rounded-xl px-3 overflow-hidden shadow-lg">
-          <MapView boundaryType={boundaryType} />
+          <MapView boundaryType={boundaryType} searchMfbr={searchMfbr}/>
         {/* Controls */}
           <div className="absolute top-4 right-4 z-20 bg-white/90 p-4 rounded-xl shadow-md w-64 space-y-3 pointer-events-auto">
             {/* Toggle Water/Land Boundaries */}
