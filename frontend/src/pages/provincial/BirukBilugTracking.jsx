@@ -51,7 +51,7 @@ const PABirukBilugTracking = () => {
               )}
             </div>
             <Button
-              onClick={() => navigate("/admin/TrackerManagement")}
+              onClick={() => navigate("/provincial_agriculturist/TrackerManagement")}
               className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700"
               style={{
                 backgroundColor: "#3863CF",

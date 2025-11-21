@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 const MABirukBilugTracking = () => {
   const navigate = useNavigate();
   const [boundaryType, setBoundaryType] = React.useState("water");
+  const [searchMfbr, setSearchMfbr] = React.useState("");
   return (
     <div className="h-full bg-gray-50" style={{ fontFamily: "Montserrat, sans-serif" }}>
       <div className="h-full px-4 py-7" style={{ fontFamily: "Montserrat, sans-serif" }}>

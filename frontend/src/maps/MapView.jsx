@@ -1083,15 +1083,17 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
       const id = feat?.properties?.mfbr_number || feat?.properties?.boat_id || 0;
       const trackerId = feat?.properties?.tracker_id || feat?.properties?.BirukBilugID;
       
-      // Filter out lost devices (inactive tokens)
+      // ONLY filter out LOST devices (devices marked as is_active=false in device-tokens)
+      // DO NOT filter out offline trackers - they should remain visible on the map
       if (trackerId && deviceTokens.has(trackerId)) {
         const token = deviceTokens.get(trackerId);
         if (token.is_active === false) {
-          console.log(`Filtering out lost device: ${trackerId}`);
-          return; // Skip this feature
+          console.log(`[MAP] Filtering out LOST device (is_active=false): ${trackerId}`);
+          return; // Skip this feature - device is lost/deactivated
         }
       }
       
+      // Keep all other trackers (including offline ones) - they will be styled accordingly
       if (!latest.has(id)) latest.set(id, feat);
     });
 
@@ -1149,15 +1151,18 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
         next.push(applyComputedStatus(feat));
       }
       
-      // Clean up stale markers: Only keep markers that are in the new data
-      // This prevents old duplicate markers from lingering
-      const cleanedNext = next.filter(f => {
-        const id = f?.properties?.boat_id;
-        return id && activeBoatIds.has(id);
+      // PRESERVE OFFLINE TRACKERS: Keep previous trackers that aren't in the new data
+      // This ensures offline trackers remain visible on the map
+      prevMap.forEach((prevFeat, prevId) => {
+        if (!activeBoatIds.has(prevId)) {
+          // This tracker isn't in the latest update - it's offline
+          // Keep it visible with its last known position and offline status
+          next.push(applyComputedStatus(prevFeat));
+        }
       });
       
-      console.log(`[MAP] Active boats: ${activeBoatIds.size}, Rendered markers: ${cleanedNext.length}`);
-      return cleanedNext;
+      console.log(`[MAP] Active boats: ${activeBoatIds.size}, Total rendered markers (including offline): ${next.length}`);
+      return next;
     });
   }, [gpsData]);
 
@@ -1179,18 +1184,21 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
             
             // Skip if no valid ID
             if (!id) {
-              console.warn('Skipping GPS feature without boat_id:', feat);
+              console.warn('[MAP] Skipping GPS feature without boat_id:', feat);
               continue;
             }
             
-            // Filter out lost devices (inactive tokens)
+            // ONLY filter out LOST devices (devices marked as is_active=false in device-tokens)
+            // DO NOT filter out offline trackers - they should remain visible on the map
             if (trackerId && deviceTokens.has(trackerId)) {
               const token = deviceTokens.get(trackerId);
               if (token.is_active === false) {
-                continue; // Skip this feature
+                console.log(`[MAP] Filtering out LOST device (is_active=false): ${trackerId}`);
+                continue; // Skip this feature - device is lost/deactivated
               }
             }
             
+            // Keep all other trackers (including offline ones) - they will be styled accordingly
             if (!latest.has(id)) latest.set(id, feat);
           }
         }
@@ -1243,14 +1251,18 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
             next.push(applyComputedStatus(feat));
           }
           
-          // Clean up stale markers: Only keep markers that are in the new data
-          const cleanedNext = next.filter(f => {
-            const id = f?.properties?.boat_id;
-            return id && activeBoatIds.has(id);
+          // PRESERVE OFFLINE TRACKERS: Keep previous trackers that aren't in the new data
+          // This ensures offline trackers remain visible on the map
+          prevMap.forEach((prevFeat, prevId) => {
+            if (!activeBoatIds.has(prevId)) {
+              // This tracker isn't in the latest update - it's offline
+              // Keep it visible with its last known position and offline status
+              next.push(applyComputedStatus(prevFeat));
+            }
           });
           
-          console.log(`[MAP] Poll: Active boats: ${activeBoatIds.size}, Rendered markers: ${cleanedNext.length}`);
-          return cleanedNext;
+          console.log(`[MAP] Poll: Active boats: ${activeBoatIds.size}, Total rendered markers (including offline): ${next.length}`);
+          return next;
         });
       } catch (err) {
         // Only log if it's not a 404 or network error (which is expected when no data)
