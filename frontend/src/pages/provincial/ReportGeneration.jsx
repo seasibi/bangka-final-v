@@ -161,7 +161,17 @@ const ProvincialReportGeneration = () => {
       headStyles: { fillColor: [37, 99, 235], textColor: 255 },
       alternateRowStyles: { fillColor: [241, 245, 249] },
       margin: { left: margin, right: margin },
-      theme: 'striped'
+      theme: 'striped',
+      didDrawPage: (data) => {
+        doc.setFontSize(10);
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const leftX = data.settings.margin.left;
+        const rightX = pageW - data.settings.margin.left;
+        const footY = pageH - 20;
+        doc.text(`  ${new Date().getFullYear()} Office of the Provincial Agriculturist - Fisheries Section.`, leftX, footY);
+        doc.text(`Date generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, rightX, footY, { align: 'right' });
+      }
     });
 
     // Signatories: Prepared by (Provincial user) + Noted by (Provincial Agriculturist)

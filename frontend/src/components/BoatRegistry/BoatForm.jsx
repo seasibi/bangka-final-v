@@ -48,6 +48,12 @@ const BoatForm = ({ initialData, isEditing }) => {
     { value: false, label: "Inactive" },
   ];
 
+  const dimensionLimits = {
+    registered_length: { min: 20, max: 25 },
+    registered_breadth: { min: 0.75, max: 0.8 },
+    registered_depth: { min: 0.75, max: 0.8 },
+  };
+
   const validateForm = () => {
     const requiredFields = [
       "boat_name",
@@ -116,6 +122,24 @@ const BoatForm = ({ initialData, isEditing }) => {
       }
     }
 
+    // Additional constraints for registered dimensions
+    const lengthVal = Number(formData.registered_length);
+    const breadthVal = Number(formData.registered_breadth);
+    const depthVal = Number(formData.registered_depth);
+
+    if (lengthVal < 20 || lengthVal > 25) {
+      setSubmitError("registered length must be between 20 and 25");
+      return false;
+    }
+    if (breadthVal < 0.75 || breadthVal > 0.8) {
+      setSubmitError("registered breadth must be between 0.75 and 0.80");
+      return false;
+    }
+    if (depthVal < 0.75 || depthVal > 0.8) {
+      setSubmitError("registered depth must be between 0.75 and 0.80");
+      return false;
+    }
+
     // Validate year
     const year = Number(formData.built_year);
     const currentYear = new Date().getFullYear();
@@ -149,7 +173,18 @@ const BoatForm = ({ initialData, isEditing }) => {
     }
 
     if (type === "number") {
-      processedValue = value === "" ? "" : value;
+      if (value === "") {
+        processedValue = "";
+      } else if (name in dimensionLimits) {
+        const numValue = parseFloat(value);
+        const { min, max } = dimensionLimits[name];
+        if (!isNaN(numValue)) {
+          const clamped = Math.max(min, Math.min(max, numValue));
+          processedValue = String(clamped);
+        }
+      } else {
+        processedValue = value;
+      }
     }
 
     if (
@@ -194,6 +229,11 @@ const BoatForm = ({ initialData, isEditing }) => {
         registered_length: Number(formData.registered_length),
         registered_breadth: Number(formData.registered_breadth),
         registered_depth: Number(formData.registered_depth),
+        tonnage_length: Number(formData.tonnage_length),
+        tonnage_breadth: Number(formData.tonnage_breadth),
+        tonnage_depth: Number(formData.tonnage_depth),
+        gross_tonnage: Number(formData.gross_tonnage),
+        net_tonnage: Number(formData.net_tonnage),
         is_active: formData.is_active === true || formData.is_active === "true",
       };
       
@@ -247,14 +287,14 @@ const BoatForm = ({ initialData, isEditing }) => {
       // 2. Update or create Boat Measurements
       try {
         const measurementsData = {
-          registered_length: cleanedData.registered_length || 1,
-          registered_breadth: cleanedData.registered_breadth || 1,
-          registered_depth: cleanedData.registered_depth || 1,
-          tonnage_length: cleanedData.registered_length || 1,
-          tonnage_breadth: cleanedData.registered_breadth || 1,
-          tonnage_depth: cleanedData.registered_depth || 1,
-          gross_tonnage: 1,
-          net_tonnage: 1
+          registered_length: cleanedData.registered_length,
+          registered_breadth: cleanedData.registered_breadth,
+          registered_depth: cleanedData.registered_depth,
+          tonnage_length: cleanedData.tonnage_length,
+          tonnage_breadth: cleanedData.tonnage_breadth,
+          tonnage_depth: cleanedData.tonnage_depth,
+          gross_tonnage: cleanedData.gross_tonnage,
+          net_tonnage: cleanedData.net_tonnage,
         };
         
         if (isEditing) {
@@ -553,8 +593,9 @@ const BoatForm = ({ initialData, isEditing }) => {
                 onChange={handleChange}
                 className={inputClasses}
                 required
-                min="0.01"
-                step="0.01"
+                min="20"
+                max="25"
+                step="1"
               />
             </div>
             <div>
@@ -566,7 +607,8 @@ const BoatForm = ({ initialData, isEditing }) => {
                 onChange={handleChange}
                 className={inputClasses}
                 required
-                min="0.01"
+                min="0.75"
+                max="0.8"
                 step="0.01"
               />
             </div>
@@ -579,7 +621,8 @@ const BoatForm = ({ initialData, isEditing }) => {
                 onChange={handleChange}
                 className={inputClasses}
                 required
-                min="0.01"
+                min="0.75"
+                max="0.8"
                 step="0.01"
               />
             </div>

@@ -2702,6 +2702,15 @@ class BoatMeasurementsViewSet(viewsets.ModelViewSet):
     queryset = BoatMeasurements.objects.all()
     serializer_class = BoatMeasurementsSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        boat_id = self.request.query_params.get('boat')
+        if boat_id:
+            try:
+                return queryset.filter(boat=boat_id)
+            except Exception:
+                return queryset
+        return queryset
 
 class GearTypeViewSet(viewsets.ModelViewSet):
     queryset = GearType.objects.all()

@@ -88,7 +88,13 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, variant }) =
             </div>
             {/* Buttons */}
             <div className="flex justify-center gap-3 px-6 pb-6">
-              <button onClick={onClose} className="px-6 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors">Cancel</button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={handleConfirm}
