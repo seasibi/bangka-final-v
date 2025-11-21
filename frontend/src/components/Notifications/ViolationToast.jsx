@@ -34,7 +34,18 @@ const ViolationToast = ({ notification, onDismiss }) => {
 
   if (!notification || !isVisible) return null;
 
-  const { boat_id, owner_name, registration_number, timestamp, location, municipality } = notification;
+  const { 
+    boat_id, 
+    owner_name, 
+    registration_number, 
+    timestamp, 
+    timestamp_start,
+    timestamp_end,
+    idle_minutes,
+    location, 
+    municipality,
+    own_municipality 
+  } = notification;
 
   return (
     <div className={`violation-toast-overlay ${isExiting ? 'exit' : ''}`}>
@@ -59,15 +70,26 @@ const ViolationToast = ({ notification, onDismiss }) => {
 
         {/* Content */}
         <div className="toast-content">
-          {/* Violation Summary - Exact format as specified */}
+          {/* Violation Summary - Dynamic data */}
           <div className="toast-summary">
             <p className="toast-text">
               <strong>Boat {boat_id}</strong>, owned by <strong>{owner_name}</strong>, 
               <strong> ({registration_number})</strong>, is now subject to questioning after 
-              the boat was observed idle for <strong>(mins)</strong> at <strong>(timestamp start)</strong> to{' '}
-              <strong>(timestamp end)</strong> at location <strong>(longitude and latitude)</strong>,{' '}
-              <strong>({municipality})</strong>, away from registered municipality{' '}
-              <strong>(own municipality)</strong>.
+              the boat was observed idle for <strong>{idle_minutes || 15} minutes</strong> from{' '}
+              <strong>{timestamp_start ? new Date(timestamp_start).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : 'Unknown'}</strong> to{' '}
+              <strong>{timestamp_end ? new Date(timestamp_end).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }) : new Date(timestamp).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              })}</strong> at location{' '}
+              <strong>{location?.lat?.toFixed(6)}, {location?.lng?.toFixed(6)}</strong>,{' '}
+              <strong>{municipality}</strong>, away from registered municipality{' '}
+              <strong>{own_municipality || 'Unknown'}</strong>.
             </p>
           </div>
 

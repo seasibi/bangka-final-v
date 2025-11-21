@@ -171,9 +171,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'db_banka',
         'USER': 'root',
-        'PASSWORD': '',
+        'PASSWORD': '12311332Asa@!',
         'HOST': 'localhost',
-        'PORT': '3306',
+        'PORT': '3307',
         'OPTIONS': {
             'charset': 'utf8mb4',
         },

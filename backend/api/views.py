@@ -7,6 +7,7 @@ from .models import GpsData, MunicipalAgriculturist, ProvincialAgriculturist, Us
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 from .models import FisherfolkBoat, MunicipalityBoundary, LandBoundary
+from .services.tracker_status_service import tracker_status_service
 from .serializers import UserSerializer, BoatSerializer, FisherfolkSerializer, ActivityLogSerializer, ProvincialAgriculturistSerializer, MunicipalAgriculturistSerializer, AddressSerializer, HouseholdSerializer, OrganizationSerializer, ContactsSerializer, BoatMeasurementsSerializer, BoatGearAssignmentSerializer, BoatGearTypeAssignmentSerializer, BoatGearSubtypeAssignmentSerializer, BirukbilugTrackerSerializer, DeviceTokenSerializer, BoundaryViolationNotificationSerializer, MunicipalitySerializer, BarangaySerializer, BarangayVerifierSerializer, SignatorySerializer
 from .serializers import FisherfolkBoatSerializer, MunicipalityBoundarySerializer, LandBoundarySerializer
 from .gear_serializers import GearTypeSerializer, GearSubtypeSerializer
@@ -1906,25 +1907,24 @@ def gps_geojson(request):
             last_status_event = TrackerStatusEvent.objects.filter(tracker_id=trk_id).order_by('-timestamp').first()
             if last_status_event:
                 status_cache[trk_id] = last_status_event.status
-                logger.info(f"[GPS_GEOJSON] Found status event for tracker {trk_id}: {last_status_event.status}")
+                logger.debug(f"[GPS_GEOJSON] Found status event for tracker {trk_id}: {last_status_event.status}")
             else:
                 status_cache[trk_id] = None
-                logger.info(f"[GPS_GEOJSON] No status event found for tracker {trk_id}, will use age-based fallback")
+                logger.debug(f"[GPS_GEOJSON] No status event found for tracker {trk_id}, will use age-based fallback")
         
         if trk_id and status_cache.get(trk_id):
             status_flag = status_cache[trk_id]
-            logger.info(f"[GPS_GEOJSON] Using cached status for tracker {trk_id}: {status_flag}")
+            logger.debug(f"[GPS_GEOJSON] Using cached status for tracker {trk_id}: {status_flag}")
         else:
             # Fallback to age-based status if no TrackerStatusEvent exists
             status_flag = "online" if age_seconds <= threshold_seconds else "offline"
-            logger.info(f"[GPS_GEOJSON] Using age-based status for tracker {trk_id or 'unknown'}: {status_flag} (age: {age_seconds}s)")
+            logger.debug(f"[GPS_GEOJSON] Using age-based status for tracker {trk_id or 'unknown'}: {status_flag} (age: {age_seconds}s)")
 
-        # Override: if last GPS fix is older than threshold, force offline even if
-        # the last TrackerStatusEvent was online or reconnecting. This prevents
-        # trackers from appearing stuck in 'reconnecting' for long periods.
+        # Override: if last GPS fix is older than threshold, force offline
+        # regardless of TrackerStatusEvent status.
         if age_seconds > threshold_seconds:
             if status_flag != "offline":
-                logger.info(
+                logger.debug(
                     f"[GPS_GEOJSON] Forcing status 'offline' for tracker {trk_id or 'unknown'} "
                     f"due to age {age_seconds}s > threshold {threshold_seconds}s (last status: {status_flag})"
                 )
@@ -3393,15 +3393,13 @@ class SignatoryViewSet(viewsets.ModelViewSet):
         
         return Response({'assigned_positions': list(assigned)})
 
-
-# Tracker History API View
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def tracker_history(request, tracker_id):
     """
     Timeline for a tracker or MFBR:
     - Works with BirukBilugID (preferred), tracker_id in GpsData, or MFBR number.
-    - Events: registration, status (online/offline/reconnecting), boundary crossings,
+    - Events: registration, status (online/offline), boundary crossings,
       violations, and idle.
     """
     from .models import BirukbilugTracker, GpsData, BoundaryCrossing, BoundaryViolationNotification, DeviceToken, Boat
@@ -3496,16 +3494,12 @@ def tracker_history(request, tracker_id):
                         age = now_ts - point.timestamp
                         if age >= offline_threshold:
                             current_status = 'offline'
-                        elif age >= reconnect_threshold:
-                            current_status = 'reconnecting'
                         else:
                             current_status = 'online'
                     else:
                         gap = gps_points[i - 1].timestamp - point.timestamp  # list sorted desc
                         if gap >= offline_threshold:
                             current_status = 'offline'
-                        elif gap >= reconnect_threshold:
-                            current_status = 'reconnecting'
                         else:
                             current_status = 'online'
 
@@ -3514,8 +3508,7 @@ def tracker_history(request, tracker_id):
                     if should_emit:
                         event_title = {
                             'online': 'Tracker Online',
-                            'offline': 'Tracker Offline',
-                            'reconnecting': 'Tracker Reconnecting'
+                            'offline': 'Tracker Offline'
                         }.get(current_status, 'Status Change')
                         timeline_events.append({
                             'id': f'status_{point.id}',
@@ -3523,8 +3516,7 @@ def tracker_history(request, tracker_id):
                             'title': event_title,
                             'description': {
                                 'online': 'Tracker came online and started transmitting data',
-                                'offline': 'Tracker went offline (no data for 8+ minutes)',
-                                'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 5+ minutes)'
+                                'offline': 'Tracker went offline (no data for 8+ minutes)'
                             }.get(current_status, 'Status changed'),
                             'timestamp': point.timestamp.isoformat(),
                             'metadata': {
@@ -3533,19 +3525,19 @@ def tracker_history(request, tracker_id):
                         })
                         previous_status = current_status
             else:
-                # Use persisted events
+                # Use persisted events - only show online/offline, not intermediate states
                 for event in status_events:
+                    # Skip reconnecting and reconnected states - only show online/offline
+                    if event.status not in ['online', 'offline']:
+                        continue
+                    
                     event_title_map = {
                         'online': 'Tracker Online',
-                        'offline': 'Tracker Offline',
-                        'reconnecting': 'Tracker Reconnecting',
-                        'reconnected': 'Tracker Reconnected'
+                        'offline': 'Tracker Offline'
                     }
                     event_desc_map = {
                         'online': 'Tracker came online and started transmitting data',
-                        'offline': 'Tracker went offline (no data for 8+ minutes)',
-                        'reconnecting': 'Tracker is attempting to reconnect (intermittent signal 5+ minutes)',
-                        'reconnected': 'Tracker reconnected successfully after being offline'
+                        'offline': 'Tracker went offline (no data for 8+ minutes)'
                     }
                     
                     timeline_events.append({
@@ -3563,7 +3555,7 @@ def tracker_history(request, tracker_id):
 
                 # Synthesize an offline event when the tracker has been silent for
                 # longer than the offline threshold, to avoid a tracker appearing
-                # permanently reconnecting/online with no recent data.
+                # permanently online with no recent data.
                 try:
                     offline_threshold = timedelta(minutes=8)
                     from django.utils import timezone as dj_tz
@@ -3900,6 +3892,36 @@ def get_device_boundary(request, device_id):
         import traceback
         logger.error(traceback.format_exc())
         return Response({'error': f'Internal error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def tracker_status_summary(request):
+    """
+    Get summary of all tracker statuses for monitoring.
+    """
+    try:
+        summary = tracker_status_service.get_status_summary()
+        return Response(summary, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get status summary: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def tracker_status_detail(request, tracker_id):
+    """
+    Get detailed status information for a specific tracker.
+    """
+    try:
+        status_info = tracker_status_service.get_tracker_status(tracker_id)
+        return Response(status_info, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get tracker status: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

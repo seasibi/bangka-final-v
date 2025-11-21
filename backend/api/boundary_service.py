@@ -961,6 +961,10 @@ def check_and_notify_boundary_crossing(boat_id: int, latitude: float, longitude:
                     created = True
                     try:
                         violation_ts = getattr(pending, 'crossing_timestamp', None) or now_ts
+                        # Calculate proper timestamps
+                        timestamp_start = pending.crossing_timestamp if hasattr(pending, 'crossing_timestamp') else violation_ts - dwell
+                        timestamp_end = violation_ts
+                        
                         notification = BoundaryViolationNotification.objects.create(
                             boundary_crossing=pending,
                             boat=boat,
@@ -971,6 +975,9 @@ def check_and_notify_boundary_crossing(boat_id: int, latitude: float, longitude:
                             from_municipality=pending.from_municipality,
                             to_municipality=pending.to_municipality,
                             violation_timestamp=violation_ts,
+                            timestamp_start=timestamp_start,
+                            timestamp_end=timestamp_end,
+                            idle_minutes=int(dwell.total_seconds() / 60),
                             current_lat=latitude,
                             current_lng=longitude,
                             dwell_duration=int(dwell.total_seconds()),

@@ -7,7 +7,8 @@ echo.
 echo This will start:
 echo   1. Redis Server
 echo   2. Django Backend (with Daphne - WebSocket support)
-echo   3. React Frontend (Vite dev server)
+echo   3. Ngrok Tunnel (Public HTTPS access)
+echo   4. React Frontend (Vite dev server)
 echo.
 echo ============================================================
 echo.
@@ -27,9 +28,16 @@ echo.
 REM Start Django Backend with Daphne
 echo [STARTING] Django Backend (with WebSocket support)...
 cd /d "%~dp0backend"
-start "Django Backend - Daphne" cmd /k "echo Django Backend Server && echo ==================== && echo Running on http://127.0.0.1:8000 && echo WebSocket: ws://127.0.0.1:8000/ws/gps/ && echo. && python -m daphne -b 0.0.0.0 -p 8000 backend.asgi:application"
+start "Django Backend - Daphne" cmd /k "echo Django Backend Server && echo ==================== && echo Running on http://127.0.0.1:8000 && echo WebSocket: ws://127.0.0.1:8000/ws/gps/ && echo Note: WebSocket access logs suppressed && echo. && python -m daphne -b 0.0.0.0 -p 8000 --verbosity 1 backend.asgi:application"
 timeout /t 3 /nobreak >nul
 echo [OK] Django Backend started
+echo.
+
+REM Start Ngrok Tunnel
+echo [STARTING] Ngrok Tunnel...
+start "Ngrok Tunnel - KEEP OPEN" cmd /k "echo Ngrok Tunnel && echo ============= && echo Public URL: https://unskilfully-unsoftening-flynn.ngrok-free.dev && echo Tunneling to: http://localhost:8000 && echo. && ngrok http --domain=unskilfully-unsoftening-flynn.ngrok-free.dev --scheme=http 8000"
+timeout /t 3 /nobreak >nul
+echo [OK] Ngrok Tunnel started
 echo.
 
 REM Start React Frontend
@@ -47,10 +55,14 @@ echo.
 echo Services running:
 echo   - Redis Server      : Running in separate window
 echo   - Django Backend    : http://127.0.0.1:8000
+echo   - Ngrok Tunnel      : https://unskilfully-unsoftening-flynn.ngrok-free.dev
 echo   - React Frontend    : http://localhost:5173
 echo.
 echo Your browser should automatically open to:
 echo   http://localhost:5173
+echo.
+echo ESP32 devices can connect to:
+echo   https://unskilfully-unsoftening-flynn.ngrok-free.dev
 echo.
 echo To stop all services:
 echo   - Close each window individually, OR
