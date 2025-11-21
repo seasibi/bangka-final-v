@@ -13,7 +13,7 @@ import L from "leaflet";
 import { apiClient } from "../services/api_urls";
 import { getMunicipalities } from "../services/municipalityService";
 import TrackerHistoryTimeline from "../components/Tracker/TrackerHistoryTimeline";
-import ViolationToast from "../components/Notifications/ViolationToast";
+// import { useNotifications } from "../contexts/NotificationContext";
 
 // Enhanced GPS prediction and interpolation utilities
 // Motion tracking calibration - can be overridden via localStorage('motionCalibration')
@@ -365,15 +365,18 @@ const UltraSmoothBoatMarker = ({ feature, previousFeature, getBoatColor, createB
       <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 6px; border-top: 1px solid #e2e8f0;">
         <span style="font-size: 10px; font-weight: 600; color: ${
           isViolating ? '#dc2626' : 
-          status === 'offline' || (feature.properties.age_seconds || 0) > OFFLINE_THRESHOLD_SECONDS ? '#6b7280' : '#16a34a'
+          status === 'offline' || (feature.properties.age_seconds || 0) > 600 ? '#6b7280' : 
+          (feature.properties.age_seconds || 0) > 180 ? '#f59e0b' : '#16a34a'
         }; display: flex; align-items: center; gap: 4px;">
           <span style="font-size: 14px;">${
             isViolating ? '🚨' : 
-            status === 'offline' || (feature.properties.age_seconds || 0) > OFFLINE_THRESHOLD_SECONDS ? '⚫' : '🟢'
+            status === 'offline' || (feature.properties.age_seconds || 0) > 600 ? '⚫' : 
+            (feature.properties.age_seconds || 0) > 180 ? '🟡' : '🟢'
           }</span>
           ${
             isViolating ? 'VIOLATION' : 
-            status === 'offline' || (feature.properties.age_seconds || 0) > OFFLINE_THRESHOLD_SECONDS ? 'Offline' : 'Online'
+            status === 'offline' || (feature.properties.age_seconds || 0) > 600 ? 'Offline' : 
+            (feature.properties.age_seconds || 0) > 180 ? 'Reconnecting' : 'Online'
           }
         </span>
         <span style="font-size: 9px; color: #94a3b8; font-style: italic;">Click for history</span>
@@ -455,52 +458,11 @@ const UltraSmoothBoatMarker = ({ feature, previousFeature, getBoatColor, createB
   );
 };
 
-// Enhanced WebSocket Hook for Real-time GPS Updates with boundary notifications and multiple device support
+// WebSocket Hook for Real-time GPS Updates with boundary notifications
 const useWebSocketGPS = (onBoundaryNotification, onViolationCleared) => {
-  const [gpsData, setGpsData] = useState(() => {
-    // Initialize from localStorage to persist trackers across refreshes
-    try {
-      const cached = localStorage.getItem('bangka_gps_cache');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        // Check if cache is less than 5 minutes old
-        if (parsed.timestamp && (Date.now() - parsed.timestamp < 300000)) {
-          return parsed.data;
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load GPS cache:', e);
-    }
-    return null;
-  });
+  const [gpsData, setGpsData] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const wsRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const reconnectAttemptsRef = useRef(0);
-  const isConnectingRef = useRef(false);
-  
-  // Store callbacks in refs to avoid reconnection on callback changes
-  const onBoundaryNotificationRef = useRef(onBoundaryNotification);
-  const onViolationClearedRef = useRef(onViolationCleared);
-  
-  useEffect(() => {
-    onBoundaryNotificationRef.current = onBoundaryNotification;
-    onViolationClearedRef.current = onViolationCleared;
-  }, [onBoundaryNotification, onViolationCleared]);
-
-  // Save GPS data to localStorage whenever it updates
-  useEffect(() => {
-    if (gpsData) {
-      try {
-        localStorage.setItem('bangka_gps_cache', JSON.stringify({
-          timestamp: Date.now(),
-          data: gpsData
-        }));
-      } catch (e) {
-        console.warn('Failed to cache GPS data:', e);
-      }
-    }
-  }, [gpsData]);
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -509,84 +471,26 @@ const useWebSocketGPS = (onBoundaryNotification, onViolationCleared) => {
     const wsUrl = `${protocol}//${wsHost}:${wsPort}/ws/gps/`;
     
     const connectWebSocket = () => {
-      // Prevent duplicate connections
-      if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.CONNECTING || wsRef.current?.readyState === WebSocket.OPEN) {
-        return;
-      }
-      
       try {
-        isConnectingRef.current = true;
         wsRef.current = new WebSocket(wsUrl);
 
         wsRef.current.onopen = () => {
-          console.log('[WebSocket] Connected for GPS updates');
+          console.log('WebSocket connected for GPS updates');
           setConnectionStatus('connected');
-          reconnectAttemptsRef.current = 0;
-          isConnectingRef.current = false;
         };
 
         wsRef.current.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data);
             if (message.type === 'gps_update' || message.type === 'initial_data') {
-              // Merge new data with existing to maintain all devices
-              setGpsData(prevData => {
-                if (!message.data?.features) return message.data;
-                
-                // Create map of existing features by unique ID
-                const existingMap = new Map();
-                if (prevData?.features) {
-                  prevData.features.forEach(feat => {
-                    const id = feat?.properties?.tracker_id || 
-                               feat?.properties?.mfbr_number || 
-                               feat?.properties?.boat_id;
-                    if (id) existingMap.set(id, feat);
-                  });
-                }
-                
-                // Update with new features
-                message.data.features.forEach(feat => {
-                  const id = feat?.properties?.tracker_id || 
-                            feat?.properties?.mfbr_number || 
-                            feat?.properties?.boat_id;
-                  if (id) existingMap.set(id, feat);
-                });
-                
-                return {
-                  type: "FeatureCollection",
-                  features: Array.from(existingMap.values())
-                };
-              });
-            } else if (message.type === 'boundary_notification' && onBoundaryNotificationRef.current) {
-              // Handle boundary violation notification with proper timestamps
-              const violationData = message.data;
-              const now = new Date();
-              const violationTimestamp = violationData.violation_timestamp || now.toISOString();
-              const dwellMinutes = Math.floor((violationData.dwell_duration || 900) / 60);
-              const timestampStart = new Date(new Date(violationTimestamp).getTime() - (dwellMinutes * 60000)).toISOString();
-              
-              const enhancedData = {
-                ...violationData,
-                boat_id: violationData.boat_name || violationData.mfbr_number,
-                owner_name: violationData.fisherfolk_name || violationData.owner_name || 'Unknown',
-                registration_number: violationData.mfbr_number || 'Unknown',
-                timestamp: violationTimestamp,
-                timestamp_start: timestampStart,
-                timestamp_end: violationTimestamp,
-                idle_minutes: dwellMinutes,
-                location: {
-                  lat: violationData.current_lat,
-                  lng: violationData.current_lng
-                },
-                municipality: violationData.to_municipality,
-                own_municipality: violationData.from_municipality
-              };
-              
-              console.log('Boundary violation detected with enhanced data:', enhancedData);
-              onBoundaryNotificationRef.current(enhancedData);
-            } else if (message.type === 'violation_cleared' && onViolationClearedRef.current) {
+              setGpsData(message.data);
+            } else if (message.type === 'boundary_notification' && onBoundaryNotification) {
+              // Handle boundary violation notification
+              console.log('Boundary violation detected:', message.data);
+              onBoundaryNotification(message.data);
+            } else if (message.type === 'violation_cleared' && onViolationCleared) {
               console.log('Violation cleared:', message.data);
-              onViolationClearedRef.current(message.data);
+              onViolationCleared(message.data);
             }
           } catch (error) {
             console.error('Error parsing WebSocket message:', error);
@@ -594,63 +498,45 @@ const useWebSocketGPS = (onBoundaryNotification, onViolationCleared) => {
         };
 
         wsRef.current.onclose = (event) => {
-          isConnectingRef.current = false;
           // Only log if it's not a normal closure
           if (event.code !== 1000 && event.code !== 1006) {
-            console.log('[WebSocket] Disconnected:', event.code, event.reason);
+            console.log('WebSocket disconnected:', event.code, event.reason);
           }
           setConnectionStatus('disconnected');
           
-          // Exponential backoff reconnection
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          reconnectAttemptsRef.current += 1;
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (document.visibilityState === 'visible' && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
+          // Attempt to reconnect after 3 seconds (silently)
+          setTimeout(() => {
+            if (wsRef.current?.readyState === WebSocket.CLOSED) {
               connectWebSocket();
             }
-          }, delay);
+          }, 3000);
         };
 
         wsRef.current.onerror = (error) => {
-          isConnectingRef.current = false;
+          // Suppress WebSocket errors in console (not critical - HTTP fallback exists)
           setConnectionStatus('error');
         };
 
       } catch (error) {
         // WebSocket connection failed - using HTTP polling fallback
-        isConnectingRef.current = false;
         setConnectionStatus('error');
       }
     };
 
-    // Handle visibility change to optimize WebSocket connection
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && 
-          wsRef.current?.readyState === WebSocket.CLOSED) {
-        connectWebSocket();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
     connectWebSocket();
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
       if (wsRef.current) {
         wsRef.current.close();
       }
     };
-  }, []); // Empty deps - callbacks are in refs
+  }, []);
 
   return { gpsData, connectionStatus };
 };
 
 const DEAD_BAND_METERS = 7;
-const OFFLINE_THRESHOLD_SECONDS = 480; // 8 minutes - boat is offline if no GPS data for 8+ minutes
+const OFFLINE_THRESHOLD_SECONDS = 600; // 10 minutes - boat is offline if no GPS data for 10+ minutes
 
 const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
   const [selectedMunicipality, setSelectedMunicipality] = useState(null);
@@ -661,8 +547,6 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
   const [violatingBoats, setViolatingBoats] = useState(new Set()); // Track boats with violations
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
   const [selectedTrackerData, setSelectedTrackerData] = useState(null);
-  const [violationNotification, setViolationNotification] = useState(null); // For toast display
-  const [isLegendExpanded, setIsLegendExpanded] = useState(true); // Legend visibility state
   
   // Handle view history click
   const handleViewHistory = (trackerId, boatData) => {
@@ -670,17 +554,16 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
     setShowHistoryTimeline(true);
   };
   
-  // Handle boundary violation notifications and show toast
+  // Handle boundary violation notifications (map-only: do not toast here)
   const handleBoundaryNotification = (notificationData) => {
     const boatId = notificationData.mfbr_number || notificationData.boat_name;
     if (boatId) {
       setViolatingBoats(prev => new Set([...prev, boatId]));
-      // Set the notification to display the toast
-      setViolationNotification(notificationData);
+      // Keep violation marker for 30 minutes; backend will clear via violation_cleared
     }
-    console.log('Boundary violation detected:', notificationData);
+    // Do NOT toast here. Toasts are handled centrally via NotificationContext/useWebSocketNotifications.
   };
-
+  
   // Use WebSocket for real-time updates
   const { gpsData, connectionStatus } = useWebSocketGPS(handleBoundaryNotification, (data) => {
     const id1 = data?.mfbr_number ? String(data.mfbr_number) : null;
@@ -1069,8 +952,8 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
     };
     
     fetchTokenStatuses();
-    // Refresh token statuses every 5 minutes (reduced from 30s to minimize server load)
-    const interval = setInterval(fetchTokenStatuses, 300000);
+    // Refresh token statuses every 30 seconds
+    const interval = setInterval(fetchTokenStatuses, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1555,58 +1438,32 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
 
       </MapContainer>
 
-      {/* Legend with Collapsible Toggle */}
-      <div className="absolute bottom-20 right-4 bg-white/95 rounded-xl shadow-lg z-20 transition-all duration-300">
-        {/* Header with Toggle Button */}
-        <div className="flex items-center justify-between p-3 border-b border-gray-200">
-          <h4 className="font-medium text-sm">Municipalities</h4>
-          <button
-            onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-            className="p-1 hover:bg-gray-100 rounded-md transition-colors"
-            aria-label={isLegendExpanded ? "Collapse legend" : "Expand legend"}
-          >
-            <svg
-              className={`w-5 h-5 text-gray-600 transition-transform duration-300 ${
-                isLegendExpanded ? 'rotate-180' : ''
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        </div>
+      {/* Legend */}
+      <div className="absolute bottom-20 right-4 bg-white/95 p-4 rounded-xl shadow-lg z-20">
         
-        {/* Collapsible Content */}
-        <div
-          className={`overflow-hidden transition-all duration-300 ${
-            isLegendExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
-          }`}
-        >
-          <div className="p-4 space-y-2">
-            <div className="grid grid-cols-2 gap-1 text-xs">
-              {municipalityOrder.map((name) => {
-                const color = municipalityColors[name] || "#CCCCCC";
-                return (
-                  <div key={name} className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      {/* Boat dot */}
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-                      {/* Land and water squares */}
-                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color, opacity: 0.55 }} />
-                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color, opacity: 0.25 }} />
-                    </div>
-                    <span className="truncate">{name}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-3 pt-2 border-t border-gray-200 text-xs text-gray-600">
-              <div>Circle: Boat color</div>
-              <div>Squares: Land / Water</div>
-            </div>
-          </div>
+        <div className="space-y-2 mb-3">
+        <h4 className="font-medium mb-1">Municipalities</h4>
+        <div className="grid grid-cols-2 gap-1 text-xs">
+          {municipalityOrder.map((name) => {
+            const color = municipalityColors[name] || "#CCCCCC";
+            return (
+              <div key={name} className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  {/* Boat dot */}
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                  {/* Land and water squares */}
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color, opacity: 0.55 }} />
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color, opacity: 0.25 }} />
+                </div>
+                <span className="truncate">{name}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-2 text-xs text-gray-600">
+          <div>Circle: Boat color</div>
+          <div>Squares: Land / Water</div>
+        </div>
         </div>
       </div>
       
@@ -1617,14 +1474,6 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
           boatData={selectedTrackerData.boatData}
           onClose={() => setShowHistoryTimeline(false)}
           inline={true}
-        />
-      )}
-      
-      {/* Violation Toast Notification */}
-      {violationNotification && (
-        <ViolationToast
-          notification={violationNotification}
-          onDismiss={() => setViolationNotification(null)}
         />
       )}
     </>

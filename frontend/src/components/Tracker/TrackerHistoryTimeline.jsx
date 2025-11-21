@@ -18,18 +18,20 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
     }
   }, [trackerId, filter]);
   
-  // Auto-refresh every 2 minutes for active trackers
+  // Auto-refresh every 60 seconds (reduced from 30) for active trackers
+  // Only refresh if component is still mounted and visible
   useEffect(() => {
     if (!trackerId) return;
     
     const interval = setInterval(() => {
+      // Only refresh if user is still viewing (not hidden/closed)
       if (document.visibilityState === 'visible') {
         fetchTrackerHistory();
       }
-    }, 120000); // 2 minutes
+    }, 60000); // 60 seconds (reduced frequency)
     
     return () => clearInterval(interval);
-  }, [trackerId, filter]);
+  }, [trackerId]); // Removed 'filter' dependency to prevent double-refresh
 
   const fetchTrackerHistory = async () => {
     try {
@@ -52,12 +54,14 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
         });
       }
       
-      // Determine most recent status event (only online/offline)
-      const statusEvents = data.filter(e => ['online','offline'].includes(e.event_type))
+      // Determine most recent status event (including 'reconnected' which means online)
+      const statusEvents = data.filter(e => ['online','offline','reconnecting','reconnected'].includes(e.event_type))
                                .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
       if (statusEvents.length > 0) {
         const newest = statusEvents[0];
-        setCurrentStatus(newest.event_type);
+        // Treat 'reconnected' as 'online' for display purposes
+        const displayStatus = newest.event_type === 'reconnected' ? 'online' : newest.event_type;
+        setCurrentStatus(displayStatus);
         setLastReportedAt(newest.timestamp);
       } else {
         setCurrentStatus('unknown');
@@ -80,6 +84,10 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
         return <Wifi {...iconProps} className="text-green-600" />;
       case 'offline':
         return <WifiOff {...iconProps} className="text-gray-500" />;
+      case 'reconnecting':
+        return <Activity {...iconProps} className="text-yellow-600 animate-pulse" />;
+      case 'reconnected':
+        return <Check {...iconProps} className="text-green-600" />;
       case 'boundary_crossing':
         return <MapPin {...iconProps} className="text-blue-600" />;
       case 'violation':
@@ -93,62 +101,12 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
     }
   };
 
-  // Format timestamp for display
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return { time: 'Unknown', relative: '', full: 'Unknown time' };
-    
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-      
-      const timeStr = date.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-      
-      let relativeStr = '';
-      if (diffMins < 1) {
-        relativeStr = 'Just now';
-      } else if (diffMins < 60) {
-        relativeStr = `${diffMins}m ago`;
-      } else if (diffHours < 24) {
-        relativeStr = `${diffHours}h ago`;
-      } else if (diffDays === 1) {
-        relativeStr = 'Yesterday';
-      } else if (diffDays < 7) {
-        relativeStr = `${diffDays} days ago`;
-      } else {
-        relativeStr = date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric'
-        });
-      }
-      
-      return {
-        time: timeStr,
-        relative: relativeStr,
-        full: date.toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        })
-      };
-    } catch (error) {
-      return { time: 'Unknown', relative: '', full: 'Unknown time' };
-    }
-  };
-
   const getEventColor = (eventType) => {
     switch (eventType) {
       case 'online': return 'bg-green-100 border-green-300';
       case 'offline': return 'bg-gray-100 border-gray-300';
+      case 'reconnecting': return 'bg-yellow-100 border-yellow-300';
+      case 'reconnected': return 'bg-green-100 border-green-300';
       case 'boundary_crossing': return 'bg-blue-100 border-blue-300';
       case 'violation': return 'bg-red-100 border-red-300';
       case 'idle': return 'bg-orange-100 border-orange-300';
@@ -157,6 +115,26 @@ const TrackerHistoryTimeline = ({ trackerId, boatData, onClose, inline = false }
     }
   };
 
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
@@ -222,7 +200,7 @@ const formatCoordinate = (value) => {
 
   const Panel = ({ children }) => (
     <div 
-      className={`bg-white ${inline ? 'rounded-2xl shadow-xl w-[360px] md:w-[420px] max-h-[80vh]' : 'rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:w-[520px] max-h-[85vh]'} flex flex-col ${inline ? '' : 'animate-slide-up'} mb-4`}
+      className={`bg-white ${inline ? 'rounded-2xl shadow-xl w-[360px] md:w-[420px] max-h-[80vh]' : 'rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:w-[520px]'} flex flex-col ${inline ? '' : 'animate-slide-up'} mb-4`}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -243,6 +221,34 @@ const formatCoordinate = (value) => {
                   MFBR: {boatData.mfbr_number}
                 </p>
               )}
+              {/* Status badge */}
+              <div className="mt-2">
+                <span className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  currentStatus === 'online'
+                    ? 'bg-green-100 text-green-700'
+                    : currentStatus === 'offline'
+                    ? 'bg-gray-100 text-gray-700'
+                    : currentStatus === 'reconnecting'
+                    ? 'bg-yellow-100 text-yellow-700'
+                    : 'bg-slate-100 text-slate-700'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    currentStatus === 'online'
+                      ? 'bg-green-500'
+                      : currentStatus === 'offline'
+                      ? 'bg-gray-500'
+                      : currentStatus === 'reconnecting'
+                      ? 'bg-yellow-500'
+                      : 'bg-slate-400'
+                  }`} />
+                  {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
+                  {lastReportedAt && (
+                    <span className="ml-2 text-[11px] font-normal opacity-70">
+                      {formatTimestamp(lastReportedAt)}
+                    </span>
+                  )}
+                </span>
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -272,7 +278,7 @@ const formatCoordinate = (value) => {
         </div>
 
         {/* Timeline Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 pb-28 md:pb-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar pb-28 md:pb-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <div className="flex flex-col items-center gap-3">
@@ -323,7 +329,7 @@ const formatCoordinate = (value) => {
                           </div>
 
                           {/* Event Card */}
-                          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                          <div className="bg-gray-50 rounded-xl p-4 hover:shadow-md transition-shadow border border-gray-200">
                             <div className="flex items-start justify-between mb-2">
                               <h4 className="font-semibold text-gray-900 text-sm">
                                 {event.title || event.event_type.replace(/_/g, ' ').toUpperCase()}
@@ -368,7 +374,7 @@ const formatCoordinate = (value) => {
                             {/* Relative Time Badge */}
                             <div className="mt-2">
                               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white border border-gray-300 text-gray-700">
-                                {formatTimestamp(event.timestamp).relative}
+                                {formatTimestamp(event.timestamp)}
                               </span>
                             </div>
                           </div>

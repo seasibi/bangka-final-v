@@ -206,43 +206,7 @@ const MunicipalReportGeneration = () => {
     return options.filter(opt => !groupBy.includes(opt));
   };
 
-  // Helper function to load map image as data URL
-  const loadMapImage = (lat, lng) => {
-    return new Promise((resolve) => {
-      try {
-        const latNum = Number(lat);
-        const lngNum = Number(lng);
-        if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) {
-          resolve(null);
-          return;
-        }
-        const z = 14;
-        const size = '640x400';
-        const mapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${latNum},${lngNum}&zoom=${z}&size=${size}&maptype=mapnik&markers=${latNum},${lngNum},red-pushpin`;
-        
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = 640;
-            canvas.height = 400;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, 640, 400);
-            resolve(canvas.toDataURL('image/png'));
-          } catch {
-            resolve(null);
-          }
-        };
-        img.onerror = () => resolve(null);
-        img.src = mapUrl;
-      } catch {
-        resolve(null);
-      }
-    });
-  };
-
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
     const margin = 40;
     const headerHeight = 120;
@@ -369,60 +333,6 @@ const MunicipalReportGeneration = () => {
         doc.text(`Date generated: ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`, rightX, footY, { align: 'right' });
       },
     });
-
-    // Add map screenshots for boundary violation reports
-    if (reportType === 'Boundary Violation Report' && processedData.length > 0) {
-      for (const item of processedData) {
-        if (item.current_lat && item.current_lng) {
-          doc.addPage();
-          let y = margin;
-          
-          // Add header on new page
-          try { doc.addImage(logoImg, 'PNG', margin, y, logoWidth, logoHeight); } catch (e) {}
-          doc.setFontSize(14); doc.setFont('helvetica','bold');
-          doc.text('Violation Location Map', margin + logoWidth + 20, y + 30);
-          y += logoHeight + 20;
-          
-          // Violation details
-          doc.setFont('helvetica','normal'); doc.setFontSize(10);
-          doc.text(`MFBR: ${item.mfbr_number || 'N/A'}`, margin, y);
-          y += 15;
-          doc.text(`Boat: ${item.boat_name || 'N/A'}`, margin, y);
-          y += 15;
-          doc.text(`Location: ${item.to_municipality || 'N/A'}`, margin, y);
-          y += 15;
-          doc.text(`Coordinates: ${Number(item.current_lat).toFixed(6)}, ${Number(item.current_lng).toFixed(6)}`, margin, y);
-          y += 25;
-          
-          // Load and add map image
-          const mapDataUrl = await loadMapImage(item.current_lat, item.current_lng);
-          const mapWidth = pw - margin * 2;
-          const mapHeight = 300;
-          
-          if (mapDataUrl) {
-            try {
-              doc.addImage(mapDataUrl, 'PNG', margin, y, mapWidth, mapHeight);
-            } catch {
-              doc.setDrawColor(209,213,219); 
-              doc.setLineWidth(1); 
-              doc.rect(margin, y, mapWidth, mapHeight);
-              doc.setFontSize(11); 
-              doc.setTextColor(107,114,128); 
-              doc.text('Map image unavailable', pw/2, y + mapHeight/2, { align:'center' }); 
-              doc.setTextColor(17,24,39);
-            }
-          } else {
-            doc.setDrawColor(209,213,219); 
-            doc.setLineWidth(1); 
-            doc.rect(margin, y, mapWidth, mapHeight);
-            doc.setFontSize(11); 
-            doc.setTextColor(107,114,128); 
-            doc.text('Map image unavailable', pw/2, y + mapHeight/2, { align:'center' }); 
-            doc.setTextColor(17,24,39);
-          }
-        }
-      }
-    }
 
     // Signatories block on last page
     const lastPage = doc.internal.getNumberOfPages();

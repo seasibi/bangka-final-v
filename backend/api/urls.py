@@ -1,8 +1,7 @@
 from django.urls import path, include  # Include is imported here
 from .views import (gps_data, gps_geojson, login_view, logout_view, refresh_token_view, protected_view,
                     get_users, create_user, update_user, change_password, set_new_password, check_email, check_registration_number,
-                    request_password_reset, reset_password_confirm, ingest_positions, deactivate_current_admin, tracker_history, get_device_boundary,
-                    tracker_status_summary, tracker_status_detail, provisioning_status)
+                    request_password_reset, reset_password_confirm, ingest_positions, deactivate_current_admin, tracker_history, get_device_boundary)
 from .test_beep_endpoint import test_beep_for_mfbr
 from rest_framework.routers import DefaultRouter
 from .views import BoatViewSet, FisherfolkViewSet, ProvincialAgriculturistViewSet, MunicipalAgriculturistViewSet, AddressViewSet, HouseholdViewSet, OrganizationViewSet, ContactsViewSet, ActivityLogViewSet, FisherfolkBoatViewSet, BirukbilugTrackerViewSet, DeviceTokenViewSet, MunicipalityViewSet, BarangayViewSet, BarangayVerifierViewSet, SignatoryViewSet
@@ -86,11 +85,6 @@ urlpatterns = [
 
     # Tracker history timeline
     path('tracker-history/<str:tracker_id>/', tracker_history, name='tracker_history'),
-    
-    # Tracker status monitoring
-    path('tracker-status/summary/', tracker_status_summary, name='tracker_status_summary'),
-    path('tracker-status/<str:tracker_id>/', tracker_status_detail, name='tracker_status_detail'),
-    path('provisioning-status/<str:tracker_id>/', provisioning_status, name='provisioning_status'),
 
     # Import boats from Excel
     

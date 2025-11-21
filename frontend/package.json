@@ -26,7 +26,6 @@
     "jspdf-autotable": "^5.0.2",
     "jwt-decode": "^4.0.0",
     "leaflet": "^1.9.4",
-    "leaflet-draw": "^1.0.4",
     "lucide-react": "^0.553.0",
     "primevue": "^4.3.5",
     "prop-types": "^15.8.1",
