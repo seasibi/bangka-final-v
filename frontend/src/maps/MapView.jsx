@@ -13,7 +13,6 @@ import L from "leaflet";
 import { apiClient } from "../services/api_urls";
 import { getMunicipalities } from "../services/municipalityService";
 import TrackerHistoryTimeline from "../components/Tracker/TrackerHistoryTimeline";
-import ViolationToast from "../components/Notifications/ViolationToast";
 
 // Enhanced GPS prediction and interpolation utilities
 // Motion tracking calibration - can be overridden via localStorage('motionCalibration')
@@ -661,7 +660,6 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
   const [violatingBoats, setViolatingBoats] = useState(new Set()); // Track boats with violations
   const [showHistoryTimeline, setShowHistoryTimeline] = useState(false);
   const [selectedTrackerData, setSelectedTrackerData] = useState(null);
-  const [violationNotification, setViolationNotification] = useState(null); // For toast display
   const [isLegendExpanded, setIsLegendExpanded] = useState(true); // Legend visibility state
   
   // Handle view history click
@@ -670,13 +668,11 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
     setShowHistoryTimeline(true);
   };
   
-  // Handle boundary violation notifications and show toast
+  // Handle boundary violation notifications - only track violating boats
   const handleBoundaryNotification = (notificationData) => {
     const boatId = notificationData.mfbr_number || notificationData.boat_name;
     if (boatId) {
       setViolatingBoats(prev => new Set([...prev, boatId]));
-      // Set the notification to display the toast
-      setViolationNotification(notificationData);
     }
     console.log('Boundary violation detected:', notificationData);
   };
@@ -1636,14 +1632,6 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
           boatData={selectedTrackerData.boatData}
           onClose={() => setShowHistoryTimeline(false)}
           inline={true}
-        />
-      )}
-      
-      {/* Violation Toast Notification */}
-      {violationNotification && (
-        <ViolationToast
-          notification={violationNotification}
-          onDismiss={() => setViolationNotification(null)}
         />
       )}
     </>
