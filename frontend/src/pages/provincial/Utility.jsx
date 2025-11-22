@@ -6,24 +6,6 @@ const Utility = () => {
 
   const utilityItems = [
     {
-      key: 'imports',
-      label: 'Import Excel',
-      description: 'Import Fisherfolk or Boat data via Excel',
-      icon: (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          height="48px"
-          viewBox="0 0 24 24"
-          width="48px"
-          fill="#3863CF"
-        >
-          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-1h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2z" />
-        </svg>
-      ),
-      color: 'bg-blue-50',
-      onClick: () => navigate('/provincial_agriculturist/excelImport'),
-    },
-    {
       key: 'helpCenter',
       label: 'Help Center',
       description: 'Access help and documentation',

@@ -2942,7 +2942,7 @@ class ImportFisherfolkExcelView(APIView):
         return Response(response_data, status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
 
 class ImportBoatExcelView(APIView):
-    """Enhanced Excel import for Boats"""
+    """Enhanced Excel import for Boats with Measurements and Gear Assignments"""
     parser_classes = [MultiPartParser, FormParser]
     permission_classes = [IsAuthenticated, IsAdmin]
 
@@ -2966,7 +2966,7 @@ class ImportBoatExcelView(APIView):
             return Response({"error": f"Missing required columns: {', '.join(missing_core)}",
                            "missing_columns": missing_core}, status=status.HTTP_400_BAD_REQUEST)
 
-        imported, skipped, errors = 0, 0, []
+        imported, skipped, errors, warnings = 0, 0, [], []
 
         def safe_get(row, col, default=None):
             if col not in df.columns:
@@ -2988,54 +2988,137 @@ class ImportBoatExcelView(APIView):
         for idx, row in df.iterrows():
             row_num = idx + 2
             try:
-                fisherfolk_reg = safe_get(row, "fisherfolk_registration_number")
-                if not fisherfolk_reg:
-                    skipped += 1
-                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": "Required"}, "type": "validation"})
-                    continue
+                with transaction.atomic():
+                    fisherfolk_reg = safe_get(row, "fisherfolk_registration_number")
+                    if not fisherfolk_reg:
+                        skipped += 1
+                        errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": "Required"}, "type": "validation"})
+                        continue
 
-                try:
-                    fisherfolk = Fisherfolk.objects.get(registration_number=fisherfolk_reg)
-                except Fisherfolk.DoesNotExist:
-                    skipped += 1
-                    errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": f"Fisherfolk '{fisherfolk_reg}' not found"}, "type": "validation"})
-                    continue
+                    try:
+                        fisherfolk = Fisherfolk.objects.get(registration_number=fisherfolk_reg)
+                    except Fisherfolk.DoesNotExist:
+                        skipped += 1
+                        errors.append({"row": row_num, "errors": {"fisherfolk_registration_number": f"Fisherfolk '{fisherfolk_reg}' not found"}, "type": "validation"})
+                        continue
 
-                boat_data = {
-                    "mfbr_number": safe_get(row, "mfbr_number"),
-                    "boat_name": safe_get(row, "boat_name", "Unnamed"),
-                    "fisherfolk_registration_number": fisherfolk,
-                    "application_date": clean_date(safe_get(row, "application_date")),
-                    "type_of_registration": safe_get(row, "type_of_registration"),
-                    "type_of_ownership": safe_get(row, "type_of_ownership"),
-                    "boat_type": safe_get(row, "boat_type"),
-                    "fishing_ground": safe_get(row, "fishing_ground"),
-                    "fma_number": safe_get(row, "fma_number"),
-                    "built_place": safe_get(row, "built_place"),
-                    "no_fishers": safe_get(row, "no_fishers", 0),
-                    "material_used": safe_get(row, "material_used"),
-                    "homeport": safe_get(row, "homeport"),
-                    "built_year": safe_get(row, "built_year"),
-                    "engine_make": safe_get(row, "engine_make", ""),
-                    "serial_number": safe_get(row, "serial_number", ""),
-                    "horsepower": safe_get(row, "horsepower", "")
-                }
+                    # Prepare boat data
+                    boat_data = {
+                        "mfbr_number": safe_get(row, "mfbr_number"),
+                        "boat_name": safe_get(row, "boat_name", "Unnamed"),
+                        "fisherfolk_registration_number": fisherfolk,
+                        "application_date": clean_date(safe_get(row, "application_date")),
+                        "type_of_registration": safe_get(row, "type_of_registration"),
+                        "type_of_ownership": safe_get(row, "type_of_ownership"),
+                        "boat_type": safe_get(row, "boat_type"),
+                        "fishing_ground": safe_get(row, "fishing_ground"),
+                        "fma_number": safe_get(row, "fma_number"),
+                        "built_place": safe_get(row, "built_place"),
+                        "no_fishers": safe_get(row, "no_fishers", 0),
+                        "material_used": safe_get(row, "material_used"),
+                        "homeport": safe_get(row, "homeport"),
+                        "built_year": safe_get(row, "built_year"),
+                        "engine_make": safe_get(row, "engine_make", ""),
+                        "serial_number": safe_get(row, "serial_number", ""),
+                        "horsepower": safe_get(row, "horsepower", ""),
+                        "is_active": safe_get(row, "is_active", True)
+                    }
 
-                if not boat_data["application_date"]:
-                    skipped += 1
-                    errors.append({"row": row_num, "errors": {"application_date": "Required or invalid format"}, "type": "validation"})
-                    continue
+                    if not boat_data["application_date"]:
+                        skipped += 1
+                        errors.append({"row": row_num, "errors": {"application_date": "Required or invalid format"}, "type": "validation"})
+                        continue
 
-                Boat.objects.create(**boat_data)
-                imported += 1
+                    # Create Boat
+                    boat = Boat.objects.create(**boat_data)
+
+                    # Create BoatMeasurements if measurement data is present
+                    has_measurements = any([
+                        safe_get(row, "registered_length"),
+                        safe_get(row, "registered_breadth"),
+                        safe_get(row, "registered_depth")
+                    ])
+
+                    if has_measurements:
+                        try:
+                            measurements_data = {
+                                "boat": boat,
+                                "registered_length": safe_get(row, "registered_length", 0),
+                                "registered_breadth": safe_get(row, "registered_breadth", 0),
+                                "registered_depth": safe_get(row, "registered_depth", 0),
+                                "tonnage_length": safe_get(row, "tonnage_length", 0),
+                                "tonnage_breadth": safe_get(row, "tonnage_breadth", 0),
+                                "tonnage_depth": safe_get(row, "tonnage_depth", 0),
+                                "gross_tonnage": safe_get(row, "gross_tonnage", 0),
+                                "net_tonnage": safe_get(row, "net_tonnage", 0)
+                            }
+                            BoatMeasurements.objects.create(**measurements_data)
+                        except Exception as e:
+                            warnings.append({"row": row_num, "message": f"Measurements not created: {str(e)}"})
+
+                    # Process Gear Assignments
+                    gear_types_str = safe_get(row, "gear_types")
+                    gear_subtypes_str = safe_get(row, "gear_subtypes")
+                    gear_quantities_str = safe_get(row, "gear_quantities")
+
+                    if gear_types_str or gear_subtypes_str:
+                        try:
+                            # Create root gear assignment
+                            boat_gear_assignment = BoatGearAssignment.objects.create(boat=boat)
+
+                            # Process gear types
+                            if gear_types_str:
+                                gear_type_names = [gt.strip() for gt in str(gear_types_str).split(',')]
+                                for gear_type_name in gear_type_names:
+                                    try:
+                                        gear_type = GearType.objects.get(name=gear_type_name)
+                                        BoatGearTypeAssignment.objects.create(
+                                            boat_gear_assignment=boat_gear_assignment,
+                                            gear_type=gear_type,
+                                            is_present=True
+                                        )
+                                    except GearType.DoesNotExist:
+                                        warnings.append({"row": row_num, "message": f"Gear type '{gear_type_name}' not found"})
+
+                            # Process gear subtypes with quantities
+                            if gear_subtypes_str:
+                                gear_subtype_names = [gs.strip() for gs in str(gear_subtypes_str).split(',')]
+                                quantities = []
+                                if gear_quantities_str:
+                                    quantities = [q.strip() for q in str(gear_quantities_str).split(',')]
+
+                                for i, gear_subtype_name in enumerate(gear_subtype_names):
+                                    try:
+                                        gear_subtype = GearSubtype.objects.get(name=gear_subtype_name)
+                                        quantity = int(quantities[i]) if i < len(quantities) else 1
+                                        BoatGearSubtypeAssignment.objects.create(
+                                            boat_gear_assignment=boat_gear_assignment,
+                                            gear_subtype=gear_subtype,
+                                            is_present=True,
+                                            quantity=quantity
+                                        )
+                                    except GearSubtype.DoesNotExist:
+                                        warnings.append({"row": row_num, "message": f"Gear subtype '{gear_subtype_name}' not found"})
+                                    except (ValueError, IndexError):
+                                        warnings.append({"row": row_num, "message": f"Invalid quantity for gear subtype '{gear_subtype_name}'"})
+
+                        except Exception as e:
+                            warnings.append({"row": row_num, "message": f"Gear assignment error: {str(e)}"})
+
+                    imported += 1
 
             except Exception as e:
                 skipped += 1
                 errors.append({"row": row_num, "errors": {"exception": str(e)}, "type": "exception"})
 
-        return Response({"imported": imported, "skipped": skipped, "total_rows": len(df), "errors": errors},
-                       status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
-                       
+        return Response({
+            "imported": imported, 
+            "skipped": skipped, 
+            "total_rows": len(df), 
+            "errors": errors,
+            "warnings": warnings
+        }, status=status.HTTP_200_OK if imported > 0 else status.HTTP_400_BAD_REQUEST)
+
 # Municipality Management ViewSets
 class MunicipalityViewSet(viewsets.ModelViewSet):
     queryset = Municipality.objects.all()
