@@ -405,14 +405,18 @@ const MapViewUltraSmooth = () => {
     Sudipen: "#64748b",
     Tubao: "#737373",
   });
+  const [municipalityNames, setMunicipalityNames] = useState([]);
 
-  // Fetch municipality colors from API
+  // Fetch municipality colors and legend names from API
   useEffect(() => {
     const fetchMunicipalityColors = async () => {
       try {
-        const municipalities = await getMunicipalities();
+        const municipalities = await getMunicipalities({ is_active: true });
         const colorMap = {};
-        municipalities.forEach(muni => {
+        const names = [];
+        municipalities.forEach((muni) => {
+          if (!muni?.name) return;
+          names.push(muni.name);
           colorMap[muni.name] = muni.color;
           if (muni.name === 'San Fernando') {
             colorMap['City Of San Fernando'] = muni.color;
@@ -421,8 +425,10 @@ const MapViewUltraSmooth = () => {
             colorMap['Sto. Tomas'] = muni.color;
           }
         });
+        names.sort((a, b) => a.localeCompare(b));
+        setMunicipalityNames(names);
         console.log('Loaded municipality colors from database:', colorMap);
-        setMunicipalityColors(prevColors => ({ ...prevColors, ...colorMap }));
+        setMunicipalityColors((prevColors) => ({ ...prevColors, ...colorMap }));
       } catch (error) {
         console.error('Failed to load municipality colors, using defaults:', error);
       }
@@ -430,11 +436,16 @@ const MapViewUltraSmooth = () => {
     fetchMunicipalityColors();
   }, []);
 
-  const municipalityOrder = [
+  const defaultMunicipalityOrder = [
     "Agoo","Aringay","Bacnotan","Bagulin","Balaoan","Bangar","Bauang","Burgos","Caba",
     "City Of San Fernando","Luna","Naguilian","Pugo","Rosario","San Gabriel","San Juan",
     "Santo Tomas","Santol","Sudipen","Tubao"
   ];
+
+  const legendMunicipalities = useMemo(
+    () => (municipalityNames.length ? municipalityNames : defaultMunicipalityOrder),
+    [municipalityNames]
+  );
 
   // Fetch boundaries once on mount
   useEffect(() => {
@@ -867,7 +878,7 @@ const status = age != null && age > 300 ? 'offline' : 'online';
         {/* Removed online/offline rows; unified legend */}
         <h4 className="font-medium mb-1">Municipalities</h4>
         <div className="grid grid-cols-2 gap-1 text-xs">
-          {municipalityOrder.map((name) => {
+          {legendMunicipalities.map((name) => {
             const color = municipalityColors[name] || '#CCCCCC';
             return (
               <div key={name} className="flex items-center gap-2">

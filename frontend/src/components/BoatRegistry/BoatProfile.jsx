@@ -369,37 +369,89 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
       // Gear Assignments (summary)
       if (Array.isArray(boat?.gear_assignments) && boat.gear_assignments.length > 0) {
         addSectionHeader('Gear Assignments');
-        const drawGearList = (title, types = []) => {
-          ensureSpace(24);
-          doc.setFont('helvetica', 'bold');
-          doc.text(title, margin, y);
-          doc.setFont('helvetica', 'normal');
-          y += 16;
+
+        const buildGearLines = (types = []) => {
+          const lines = [];
           types.forEach((t) => {
-            ensureSpace(18);
-            const typeName = t?.gear_type?.name ? t.gear_type.name.split(' ').slice(1).join(' ') : 'Unknown Type';
-            const line = `• ${typeName}`;
-            doc.text(line, margin + 8, y);
-            y += 14;
+            const typeName = t?.gear_type?.name
+              ? t.gear_type.name.split(' ').slice(1).join(' ')
+              : 'Unknown Type';
+            lines.push(`• ${typeName}`);
+
             const subs = Array.isArray(t?.subtypes_data) ? t.subtypes_data : [];
             subs.forEach((sub) => {
-              ensureSpace(14);
               const subName = sub?.gear_subtype?.name || 'Unknown Subtype';
               const qty = sub?.is_present ? (sub?.quantity ?? '—') : 'Absent';
               const subLine = `   - ${subName}  ${sub?.is_present ? `(Qty: ${qty})` : '(Absent)'}`;
-              const wrapped = doc.splitTextToSize(subLine, pageWidth - margin * 2 - 16);
-              doc.text(wrapped, margin + 16, y);
-              y += 14 * Math.max(1, wrapped.length);
+              lines.push(subLine);
             });
-            y += 4;
+
+            if (subs.length > 0) {
+              lines.push(''); // small gap between gear types
+            }
           });
+          if (lines[lines.length - 1] === '') lines.pop();
+          return lines;
+        };
+
+        const drawGearColumns = (marine = [], inland = []) => {
+          // Estimate height needed so we don't split the columns across pages
+          const estimateLines = (types = []) => {
+            let count = 0;
+            types.forEach((t) => {
+              count += 1; // bullet line
+              const subs = Array.isArray(t?.subtypes_data) ? t.subtypes_data : [];
+              count += subs.length; // one line per subtype
+            });
+            return Math.max(1, count);
+          };
+
+          const marineLinesCount = estimateLines(marine);
+          const inlandLinesCount = estimateLines(inland);
+          const maxLines = Math.max(marineLinesCount, inlandLinesCount) + 2; // include titles
+          const neededHeight = maxLines * 14 + 24;
+          ensureSpace(neededHeight);
+
+          const colWidth = (pageWidth - margin * 2) / 2;
+          const xMarine = margin;
+          const xInland = margin + colWidth;
+          const startY = y;
+
+          // Marine column
+          doc.setFont('helvetica', 'bold');
+          doc.text('Marine Gear Types', xMarine, startY);
+          doc.setFont('helvetica', 'normal');
+          const marineLines = buildGearLines(marine);
+          let marineBottom = startY;
+          if (marineLines.length > 0) {
+            const wrappedMarine = doc.splitTextToSize(marineLines, colWidth - 12);
+            doc.text(wrappedMarine, xMarine, startY + 16);
+            marineBottom = startY + 16 + 14 * Math.max(1, wrappedMarine.length);
+          } else {
+            marineBottom = startY + 18;
+          }
+
+          // Inland column
+          doc.setFont('helvetica', 'bold');
+          doc.text('Inland Gear Types', xInland, startY);
+          doc.setFont('helvetica', 'normal');
+          const inlandLines = buildGearLines(inland);
+          let inlandBottom = startY;
+          if (inlandLines.length > 0) {
+            const wrappedInland = doc.splitTextToSize(inlandLines, colWidth - 12);
+            doc.text(wrappedInland, xInland, startY + 16);
+            inlandBottom = startY + 16 + 14 * Math.max(1, wrappedInland.length);
+          } else {
+            inlandBottom = startY + 18;
+          }
+
+          y = Math.max(marineBottom, inlandBottom) + 10;
         };
 
         boat.gear_assignments.forEach((ga, idx) => {
-          const marine = (ga.types_data || []).filter(t => t?.gear_type?.classification === 1);
-          const inland = (ga.types_data || []).filter(t => t?.gear_type?.classification === 2);
-          drawGearList('Marine Gear Types', marine);
-          drawGearList('Inland Gear Types', inland);
+          const marine = (ga.types_data || []).filter((t) => t?.gear_type?.classification === 1);
+          const inland = (ga.types_data || []).filter((t) => t?.gear_type?.classification === 2);
+          drawGearColumns(marine, inland);
           if (idx < boat.gear_assignments.length - 1) addDivider();
         });
         addDivider();
@@ -407,13 +459,32 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
 
       // Certification
       addSectionHeader('Certification');
+
+      // Pre-text paragraph (Boat profile wording)
+      const boatCertText =
+        'I hereby certify that all information contained herein is true and correct.';
+      ensureSpace(80);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      const boatCertLines = doc.splitTextToSize(boatCertText, pageWidth - margin * 2);
+      doc.text(boatCertLines, margin, y);
+      const boatCertHeight = 14 * Math.max(1, boatCertLines.length);
+      y += boatCertHeight + 10;
+
       const applicantName = boat?.fisherfolk
         ? `${boat.fisherfolk.salutations ? boat.fisherfolk.salutations + ' ' : ''}${boat.fisherfolk.first_name || ''} ${boat.fisherfolk.middle_name ? boat.fisherfolk.middle_name + ' ' : ''}${boat.fisherfolk.last_name || ''}`.trim()
         : (boat?.owner_name || '');
       addKVGrid([
         ['Name of Applicant', applicantName],
-        ['Date of Registration', boat?.application_date ? new Date(boat.application_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString()],
-      ], 2);
+        ['Date of Application', boat?.application_date
+          ? new Date(boat.application_date).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })
+          : new Date().toLocaleDateString(),
+        ],
+      ], 2, true);
       addDivider();
 
       // Signatories (Enumerator, Noted by)
@@ -552,7 +623,27 @@ const BoatProfile = ({ editBasePath = '/admin' }) => {
               <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>
             )}
 
-            <Button onClick={generatePDF} className="bg-blue-600 hover:bg-blue-700">Print Report</Button>
+            <Button
+              onClick={generatePDF}
+              className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+            >
+              <svg
+                className="w-4 h-4"
+                aria-hidden="true"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M7 9V4h10v5m-9 7h8v4H8v-4Zm-3-6h14a2 2 0 0 1 2 2v5H3v-5a2 2 0 0 1 2-2Z"
+                />
+              </svg>
+              <span>Print Report</span>
+            </Button>
 
             {!isProvincial && boat.is_active && (
               <Button

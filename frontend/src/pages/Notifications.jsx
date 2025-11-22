@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNotifications } from '../contexts/NotificationContext'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import logo from '../assets/logo.png'
 import { apiClient } from '../services/api_urls'
-import { getFisherfolkById, getFisherfolk } from '../services/fisherfolkService'
-
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
-import { ChevronRightIcon } from '@heroicons/react/24/outline'
+import { ChevronRightIcon, PrinterIcon } from '@heroicons/react/24/outline'
 import { useAuth } from '../contexts/AuthContext'
 import { getSignatories } from '../services/signatoriesService'
+import { getFisherfolkById } from '../services/fisherfolkService'
 
 const formatReportNo = (id, createdAt) => {
   try {
@@ -24,362 +20,254 @@ const formatReportNo = (id, createdAt) => {
 
 const toFixedOrNA = (num, digits=5) => (Number.isFinite(Number(num)) ? Number(num).toFixed(digits) : 'N/A')
 
-const downloadPdf = async (n, user, notedBy) => {
-  const doc = new jsPDF({ unit: 'pt', format: 'letter', orientation: 'portrait' })
-  const pw = doc.internal.pageSize.getWidth()
-  const ph = doc.internal.pageSize.getHeight()
-  const margin = 48
-  let y = margin
+const normalizeSpaces = (str = '') => String(str).replace(/\s+/g, ' ').trim()
 
-  // Header (fits within margins)
-  const logoW = 80, logoH = 80, gap = 16
-  try { doc.addImage(logo, 'PNG', margin, y, logoW, logoH) } catch (_) {}
-  const textX = margin + logoW + gap
-  const textMaxW = pw - margin - textX
-  doc.setDrawColor(0)
-  // Office title (single line, auto-shrink)
-  const title = 'Office of the Provincial Agriculturist - Fisheries Section'
-  let titleSize = 20
-  doc.setFont('helvetica','bold')
-  while (titleSize > 10) {
-    doc.setFontSize(titleSize)
-    if (doc.getTextWidth(title) <= textMaxW) break
-    titleSize -= 1
+const deriveContactFromNotification = (n = {}) => {
+  const fallbackName = (
+    n.contact_person_full_name ||
+    n.contact_full_name ||
+    n.emergency_contact_full_name ||
+    n.emergency_contact_name ||
+    n.fisherfolk_contact_person_name ||
+    n.contact_person_name ||
+    n.contact_name ||
+    n.fisherfolk_contact_person ||
+    ''
+  )
+  const fallbackNumber = (
+    n.contact_person_number ||
+    n.contact_number ||
+    n.contact_mobile ||
+    n.fisherfolk_contact_number ||
+    n.fisherfolk_contact_person_number ||
+    ''
+  )
+  return {
+    name: fallbackName ? normalizeSpaces(fallbackName) : 'N/A',
+    number: fallbackNumber || 'N/A'
   }
-  doc.text(title, textX, y + 20)
-  // Contact lines
-  doc.setFont('helvetica','normal'); doc.setFontSize(10)
-  const contact = [
-    'Provincial Agriculturist Office, Aguila Road, Brgy. II',
-    'City of San Fernando, La Union 2500',
-    'Phone: (072) 888-3184 / 607-4492 / 607-4488',
-    'Email: opaglaunion@yahoo.com'
-  ]
-  let ty = y + 36
-  contact.forEach((line, idx) => { doc.text(line, textX, ty + idx * 12, { maxWidth: textMaxW }) })
-  const headerBottom = Math.max(y + logoH, ty + (contact.length * 12)) + 10
-  doc.setLineWidth(1); doc.line(margin, headerBottom, pw - margin, headerBottom)
-  y = headerBottom + 16
+}
 
-  // Centered title below header
-  doc.setFont('helvetica','bold'); doc.setFontSize(20)
-  doc.text('Boundary Violation Report', pw/2, y + 18, { align: 'center' })
-  y += 18
+const fetchFisherfolkContactDetails = async (n = {}) => {
+  try {
+    const fisherfolkCandidate =
+      (typeof n.fisherfolk === 'object' && (n.fisherfolk?.registration_number || n.fisherfolk?.id)) ||
+      n.registration_number ||
+      n.fisherfolk_registration_number?.registration_number ||
+      n.fisherfolk_registration_number ||
+      n.fisherfolk_id ||
+      (typeof n.fisherfolk === 'string' ? n.fisherfolk : (Number.isFinite(Number(n.fisherfolk)) ? Number(n.fisherfolk) : null))
 
-  // Meta table
+    if (!fisherfolkCandidate) return null
+
+    const profile = await getFisherfolkById(fisherfolkCandidate)
+    if (!profile) return null
+
+    const contactSource = (() => {
+      if (profile.contacts && !Array.isArray(profile.contacts)) return profile.contacts
+      if (Array.isArray(profile.contacts) && profile.contacts.length) return profile.contacts[0]
+      if (profile.contact && !Array.isArray(profile.contact)) return profile.contact
+      if (Array.isArray(profile.contact) && profile.contact.length) return profile.contact[0]
+      return null
+    })()
+
+    if (!contactSource) return null
+
+    const name = normalizeSpaces([
+      contactSource.contact_fname,
+      contactSource.contact_mname,
+      contactSource.contact_lname
+    ].filter(Boolean).join(' '))
+
+    return {
+      name: name || 'N/A',
+      number: contactSource.contact_contactno || contactSource.contact_number || 'N/A'
+    }
+  } catch (error) {
+    console.warn('Failed to fetch fisherfolk contact info', error)
+    return null
+  }
+}
+
+const downloadPdf = async (n, generatedByName, generatedByTitle, notedBy) => {
+  if (!n) return
+
   const boatName = n.mfbr_number || n.boat_name || `Boat ${n.boat || ''}`
-  // Priority: MFBR/Boat contact -> fisherfolk registration/owner contact -> fisherfolk contact -> flat fallbacks
-  let contactPerson = (
-    // MFBR / Boat roots
-    n.mfbr?.contact?.full_name || n.mfbr?.contact?.name || n.mfbr?.contact?.person_name || n.mfbr?.contact?.contact_person ||
-    n.boat?.contact?.full_name || n.boat?.contact?.name || n.boat?.contact?.person_name || n.boat?.contact?.contact_person ||
-    n.boat_record?.contact?.full_name || n.boat_record?.contact?.name || n.boat_record?.contact?.person_name || n.boat_record?.contact?.contact_person ||
-    n.boat_info?.contact?.full_name || n.boat_info?.contact?.name || n.boat_info?.contact?.person_name || n.boat_info?.contact?.contact_person ||
-    n.boat_details?.contact?.full_name || n.boat_details?.contact?.name || n.boat_details?.contact?.person_name || n.boat_details?.contact?.contact_person ||
-    n.mfbr_details?.contact?.full_name || n.mfbr_details?.contact?.name || n.mfbr_details?.contact?.person_name || n.mfbr_details?.contact?.contact_person ||
-    // Fisherfolk registration / owner
-    n.fisherfolk_registration_number?.contact?.full_name || n.fisherfolk_registration_number?.contact?.name || n.fisherfolk_registration_number?.contact?.person_name ||
-    n.owner?.contact?.full_name || n.owner?.contact?.name || n.owner?.contact?.person_name ||
-    // Fisherfolk contact
-    n.fisherfolk?.contact?.full_name || n.fisherfolk?.contact?.name || n.fisherfolk?.contact?.person_name ||
-    // Flat fallbacks
-    n.contact_person_full_name || n.contact_full_name || n.emergency_contact_full_name || n.emergency_contact_name || n.fisherfolk_contact_person_name || n.contact_person_name || n.contact_name || n.fisherfolk_contact_person || 'N/A'
-  )
-  let contactNumber = (
-    // MFBR / Boat roots
-    n.mfbr?.contact?.number || n.mfbr?.contact?.mobile || n.mfbr?.contact?.phone || n.mfbr?.contact?.contact_number ||
-    n.boat?.contact?.number || n.boat?.contact?.mobile || n.boat?.contact?.phone || n.boat?.contact?.contact_number ||
-    n.boat_record?.contact?.number || n.boat_record?.contact?.mobile || n.boat_record?.contact?.phone || n.boat_record?.contact?.contact_number ||
-    n.boat_info?.contact?.number || n.boat_info?.contact?.mobile || n.boat_info?.contact?.phone || n.boat_info?.contact?.contact_number ||
-    n.boat_details?.contact?.number || n.boat_details?.contact?.mobile || n.boat_details?.contact?.phone || n.boat_details?.contact?.contact_number ||
-    n.mfbr_details?.contact?.number || n.mfbr_details?.contact?.mobile || n.mfbr_details?.contact?.phone || n.mfbr_details?.contact?.contact_number ||
-    // Fisherfolk registration / owner
-    n.fisherfolk_registration_number?.contact?.number || n.fisherfolk_registration_number?.contact?.mobile || n.fisherfolk_registration_number?.contact?.phone ||
-    n.owner?.contact?.number || n.owner?.contact?.mobile || n.owner?.contact?.phone ||
-    // Fisherfolk contact
-    n.fisherfolk?.contact?.number || n.fisherfolk?.contact?.mobile || n.fisherfolk?.contact?.phone ||
-    // Flat fallbacks
-    n.contact_person_number || n.contact_number || n.contact_mobile || n.fisherfolk_contact_number || n.fisherfolk_contact_person_number || 'N/A'
-  )
-  // If still missing and we have a fisherfolk id, fetch details to get contact info
-  if ((contactPerson === 'N/A' || contactNumber === 'N/A') && n.fisherfolk) {
-    try {
-      let ff = null
-      // Try direct ID lookup first
-      try { ff = await getFisherfolkById(n.fisherfolk) } catch (_) { ff = null }
-      // If not found and n.fisherfolk looks like a registration number, search list
-      if (!ff) {
-        try {
-          const list = await getFisherfolk()
-          if (Array.isArray(list)) {
-            ff = list.find(x => String(x.registration_number || '').trim() === String(n.fisherfolk).trim()) || null
-          }
-        } catch (_) { /* ignore */ }
-      }
-      if (ff) {
-        let contactObj = ff.contacts || {}
-        // Fallback: query contacts endpoint if not embedded
-        const hasName = contactObj && (contactObj.contact_fname || contactObj.contact_lname)
-        if (!hasName) {
-          try {
-            const fisherId = ff.id || (Number.isFinite(Number(n.fisherfolk)) ? Number(n.fisherfolk) : undefined)
-            const res = await apiClient.get('contacts/', { params: { fisherfolk: fisherId } })
-            const arr = Array.isArray(res?.data?.results) ? res.data.results : (Array.isArray(res?.data) ? res.data : [])
-            if (arr.length > 0) contactObj = arr[0]
-          } catch (_) { /* ignore */ }
-        }
+  const boatProperName = n.boat_name || n.boat || ''
+  const owner = n.fisherfolk_name || 'N/A'
 
-        const contactComposed = [contactObj?.contact_fname, contactObj?.contact_mname, contactObj?.contact_lname]
-          .filter(Boolean)
-          .join(' ')
-          .replace(/\s+/g,' ')
-          .trim()
-        const legacyComposed = [ff.first_name, ff.middle_name, ff.last_name].filter(Boolean).join(' ').replace(/\s+/g,' ').trim()
-        const p = contactComposed || ff.contact_person_full_name || ff.contact_full_name || ff.emergency_contact_full_name || ff.emergency_contact_name || ff.fisherfolk_contact_person_name || ff.contact_person_name || ff.contact_name || ff.fisherfolk_contact_person || legacyComposed || 'N/A'
-        const num = contactObj?.contact_contactno || ff.contact_person_number || ff.contact_number || ff.contact_mobile || ff.fisherfolk_contact_number || ff.fisherfolk_contact_person_number
-        if (!contactPerson || contactPerson === 'N/A') contactPerson = p
-        if (!contactNumber || contactNumber === 'N/A') contactNumber = num || contactNumber
-      }
-    } catch (_) { /* ignore */ }
-  }
+  const fallbackContact = deriveContactFromNotification(n)
+  const fetchedContact = await fetchFisherfolkContactDetails(n)
+  const contactPersonName = fetchedContact?.name || fallbackContact.name
+  const contactPersonNumber = fetchedContact?.number || fallbackContact.number
+
+  const trackerNo = n.tracker_number || 'N/A'
+  const reportNo = formatReportNo(n.id, n.created_at)
+  const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
+  const latNum = Number(n.current_lat)
+  const lngNum = Number(n.current_lng)
+  const hasCoords = Number.isFinite(latNum) && Number.isFinite(lngNum)
+  const latDisplay = hasCoords ? latNum.toFixed(5) : 'N/A'
+  const lngDisplay = hasCoords ? lngNum.toFixed(5) : 'N/A'
+  const dwellSecs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes) || 0) * 60)
+  const idleStartDt = new Date(n.violation_timestamp || n.created_at)
+  const idleEndDt = new Date(idleStartDt.getTime() + dwellSecs * 1000)
+  const idleStartStr = idleStartDt.toLocaleString()
+  const idleEndStr = idleEndDt.toLocaleString()
+  const dateShort = (() => {
+    const d = new Date()
+    const dd = String(d.getDate()).padStart(2,'0')
+    const mm = String(d.getMonth()+1).padStart(2,'0')
+    const yy = d.getFullYear()
+    return `${dd}/${mm}/${yy}`
+  })()
+  const notedName = notedBy ? `${notedBy.first_name || ''} ${notedBy.middle_name ? notedBy.middle_name.charAt(0)+'. ' : ''}${notedBy.last_name || ''}`.replace(/\s+/g,' ').trim() : ''
+  const notedTitle = notedBy?.position || 'Provincial Agriculturist'
+
+  const mapSection = hasCoords
+    ? '<div class="shot"><div id="map"></div></div>'
+    : '<div class="shot no-map"><div class="no-map-msg">Coordinates unavailable. Unable to render map preview.</div></div>'
+
+  const mapScript = hasCoords ? `
+        <script>
+          (function(){
+            var lat=${latNum};
+            var lng=${lngNum};
+            var m = L.map('map', { zoomControl: false, attributionControl: false }).setView([lat,lng], 13);
+            var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+            tl.addTo(m);
+            L.marker([lat,lng]).addTo(m);
+            var printed = false;
+            tl.on('load', function(){ if (printed) return; printed = true; setTimeout(function(){ try { window.focus(); window.print(); } catch(e){} }, 400); });
+            setTimeout(function(){ if (!printed) { try { window.focus(); window.print(); } catch(e){} } }, 2500);
+          })();
+        </script>
+      ` : ''
 
   const metaRows = [
     ['MFBR Number', boatName],
-    ['Boat Name', n.boat_name || n.boat || 'N/A'],
-    ['Tracker Number', n.tracker_number || 'N/A'],
-    ['Report Number', formatReportNo(n.id, n.created_at)],
-    ['Contact Person', contactPerson],
-    ['Contact Number', contactNumber],
-    ['Idle Start', new Date(n.violation_timestamp || n.created_at).toLocaleString()],
-    ['Idle End', (() => { const secs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes)||0) * 60); const s = new Date(new Date(n.violation_timestamp || n.created_at).getTime() + secs*1000); return s.toLocaleString() })()]
+    ['Boat Name', boatProperName || 'N/A'],
+    ['Tracker Number', trackerNo],
+    ['Report Number', reportNo],
+    ['Contact Person', contactPersonName || 'N/A'],
+    ['Contact Number', contactPersonNumber || 'N/A'],
+    ['Idle Start', idleStartStr],
+    ['Idle End', idleEndStr]
   ]
-  // Convert [field,value] rows into 4-column rows: [f1,v1,f2,v2]
-  const metaRows4 = []
+
+  const metaRowPairs = []
   for (let i = 0; i < metaRows.length; i += 2) {
-    const left = metaRows[i]
-    const right = metaRows[i + 1]
-    if (right) {
-      metaRows4.push([left[0], left[1], right[0], right[1]])
-    } else {
-      metaRows4.push([left[0], left[1], '', ''])
-    }
-  }
-  autoTable(doc, {
-    startY: y+20,
-    body: metaRows4,
-    theme: 'grid',
-    styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 },
-    headStyles: { fillColor: [241,245,249], textColor: [17,24,39] },
-    columnStyles: {
-      0: { fontStyle: 'bold' },
-      2: { fontStyle: 'bold' }
-    },
-    margin: { left: margin, right: margin }
-  })
-
-  y = doc.lastAutoTable.finalY + 16
-
-  // Narrative paragraph
-  const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
-  const owner = n.fisherfolk_name || 'N/A'
-  const lat = toFixedOrNA(n.current_lat)
-  const lng = toFixedOrNA(n.current_lng)
-  const paragraph = `${boatName}${n.boat_name ? ` (${n.boat_name})` : ''}, owned by ${owner}, is now subject to questioning after the boat was observed idle for ${mins} mins from ${new Date(n.violation_timestamp || n.created_at).toLocaleString()} to ${(() => { const secs = Number.isFinite(Number(n.dwell_duration)) ? Number(n.dwell_duration) : ((Number(n.dwell_duration_minutes)||0) * 60); const s = new Date(new Date(n.violation_timestamp || n.created_at).getTime() + secs*1000); return s.toLocaleString() })()} at location (${lng}, ${lat}), ${n.to_municipality}, away from registered municipality ${n.from_municipality || ''}. An SMS notification has been sent immediately to the fisherfolk’s contact person, ${contactPerson}, now being subject to questioning. Monitoring continues for any movement or activity.`
-  doc.setFont('helvetica','normal'); doc.setFontSize(12)
-  const p = doc.splitTextToSize(paragraph, pw - margin*2)
-  doc.text(p, margin, y)
-  // Advance y past narrative and ensure a generous buffer below the meta table
-  const narrativeHeight = 18 * p.length
-  const bufferBelowMeta = 4
-  y = y + narrativeHeight + bufferBelowMeta
-
-  // Static map using OSM tiles (same source as MapView) and a blue pin
-  const boxH = 120
-  const boxW = pw - margin*2
-  const latNum = Number(n.current_lat)
-  const lngNum = Number(n.current_lng)
-  const z = 18
-
-  // Web Mercator helpers (Leaflet math)
-  const mercX = (lon) => (lon + 180) / 360
-  const mercY = (lat) => {
-    const rad = (lat * Math.PI) / 180
-    return (1 - Math.log(Math.tan(rad) + 1/Math.cos(rad)) / Math.PI) / 2
-  }
-  const scale = Math.pow(2, z)
-  const xtile = mercX(lngNum) * scale
-  const ytile = mercY(latNum) * scale
-  const xIdx = Math.floor(xtile)
-  const yIdx = Math.floor(ytile)
-  const xPx = Math.floor((xtile - xIdx) * 256)
-  const yPx = Math.floor((ytile - yIdx) * 256)
-
-  const loadImage = (url) => new Promise((resolve) => {
-    try {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.onload = () => resolve(img)
-      img.onerror = () => resolve(null)
-      img.src = url
-    } catch { resolve(null) }
-  })
-
-  // Build a 6x2 grid of tiles centered on the violation. This aspect ratio
-  // roughly matches the box, so with CONTAIN scaling the grid fills the width
-  // while staying inside the height (no overflow outside the rectangle).
-  const tilesAcross = 6
-  const tilesDown = 2
-  const scaleW = boxW / (tilesAcross * 256)
-  const scaleH = boxH / (tilesDown * 256)
-  const scaleDoc = Math.min(scaleW, scaleH)
-
-  const imgW = 256 * scaleDoc
-  const imgH = 256 * scaleDoc
-
-  const xCenter = margin + boxW / 2
-  const yCenter = y + boxH / 2
-
-  // Determine tile index ranges
-  const halfX = Math.floor(tilesAcross / 2)
-  const halfY = Math.floor(tilesDown / 2)
-  const startX = xIdx - halfX
-  const startY = yIdx - halfY
-  const endX = xIdx + halfX
-  const endY = yIdx + halfY
-
-  // Try to load at least the center tile; if it fails, use coordinates fallback
-  const centerUrl = `https://a.tile.openstreetmap.org/${z}/${xIdx}/${yIdx}.png`
-  const centerTile = await loadImage(centerUrl)
-  if (centerTile) {
-    try {
-      // Place tiles and compute the exact frame matching the visible map area
-      const maxIndex = Math.pow(2, z)
-      const totalW = tilesAcross * imgW
-      const totalH = tilesDown * imgH
-      const gridOriginX = margin + (boxW - totalW) / 2
-      const gridOriginY = y + (boxH - totalH) / 2
-      const frameW = totalW
-      const frameH = totalH
-      const frameX = gridOriginX
-      const frameY = gridOriginY
-
-      // Save state and clip tiles strictly to the rounded rectangle
-      if (doc.saveGraphicsState) doc.saveGraphicsState()
-      try {
-        if (doc.roundedRect) doc.roundedRect(frameX, frameY, frameW, frameH, 6, 6)
-        if (doc.clip) doc.clip()
-        if (doc.discardPath) doc.discardPath()
-      } catch {}
-
-      // Pixel of target coordinate inside the grid (before shift)
-      const coordPixelXInGrid = (xPx + (xIdx - startX) * 256) * scaleDoc
-      const coordPixelYInGrid = (yPx + (yIdx - startY) * 256) * scaleDoc
-      // Shift needed so that coord aligns with box center
-      const shiftX = (margin + boxW / 2) - (gridOriginX + coordPixelXInGrid)
-      const shiftY = (y + boxH / 2) - (gridOriginY + coordPixelYInGrid)
-
-      for (let ty = startY; ty <= endY; ty++) {
-        for (let tx = startX; tx <= endX; tx++) {
-          const wrapX = ((tx % maxIndex) + maxIndex) % maxIndex
-          const clampY = Math.max(0, Math.min(maxIndex - 1, ty))
-          const sub = ['a','b','c'][(tx - startX + ty - startY + maxIndex) % 3]
-          const url = `https://${sub}.tile.openstreetmap.org/${z}/${wrapX}/${clampY}.png`
-
-          // eslint-disable-next-line no-await-in-loop
-          const img = (tx === xIdx && ty === yIdx) ? centerTile : await loadImage(url)
-          if (!img) continue
-          const dx = gridOriginX + (tx - startX) * imgW + shiftX
-          const dy = gridOriginY + (ty - startY) * imgH + shiftY
-          doc.addImage(img, 'PNG', dx, dy, imgW, imgH)
-        }
-      }
-
-      if (doc.restoreGraphicsState) doc.restoreGraphicsState()
-
-      // Draw border after tiles (slight inset to avoid aliasing outside frame)
-      doc.setDrawColor(209,213,219); doc.setLineWidth(1);
-      const inset = 0.5
-      doc.roundedRect(frameX + inset, frameY + inset, frameW - inset*2, frameH - inset*2, 6, 6)
-
-      // North indicator (text only)
-      doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(17,24,39); doc.text('N', frameX + 12, frameY + 20)
-
-      // Pin marker (vector): outer white ring then inner blue dot
-      const pinOuterR = 7
-      const pinInnerR = 5
-      doc.setFillColor(255,255,255); doc.circle(xCenter, yCenter - 6, pinOuterR, 'F')
-      doc.setFillColor(59,130,246); doc.circle(xCenter, yCenter - 6, pinInnerR, 'F')
-
-    } catch {
-      // Fallback: frame and pin only
-      doc.setDrawColor(209,213,219); doc.setLineWidth(1); doc.roundedRect(margin, y, boxW, boxH, 6, 6)
-      const xCenter = margin + boxW/2
-      const yCenter = y + boxH/2
-      doc.setFillColor(255,255,255); doc.circle(xCenter, yCenter, 7, 'F')
-      doc.setFillColor(59,130,246); doc.circle(xCenter, yCenter, 5, 'F')
-    }
-  } else {
-    // Fallback: frame and pin only
-    doc.setDrawColor(209,213,219); doc.setLineWidth(1); doc.roundedRect(margin, y, boxW, boxH, 6, 6)
-    const xCenter = margin + boxW/2
-    const yCenter = y + boxH/2
-    doc.setFillColor(255,255,255); doc.circle(xCenter, yCenter, 7, 'F')
-    doc.setFillColor(59,130,246); doc.circle(xCenter, yCenter, 5, 'F')
+    metaRowPairs.push([metaRows[i], metaRows[i + 1] || ['', '']])
   }
 
-  y += boxH + 24
+  const metaTableHtml = metaRowPairs.map(([left, right]) => `
+          <tr>
+            <th>${left[0]}</th>
+            <td>${left[1] ?? ''}</td>
+            <th>${right[0] ?? ''}</th>
+            <td>${right[1] ?? ''}</td>
+          </tr>
+        `).join('')
 
-  // Footer helper (single place, bottom of page)
-  const footer = () => {
-    doc.setFont('helvetica','normal');
-    doc.setFontSize(10);
-    const d = new Date().toLocaleDateString();
-    doc.text('Office of the Provincial Agriculturist - Fisheries Section.', margin, ph - 24);
-    doc.text(`Date Generated: ${d}`, pw - margin, ph - 24, { align: 'right' });
-  }
+  const html = `<!doctype html><html><head>
+        <meta charset="utf-8"/>
+        <title>Boundary Violation Report - ${boatName}</title>
+        <style>
+          @page { size: A4; margin: 15mm }
+          html, body { height: 100%; }
+          body{font-family: Arial, Helvetica, sans-serif; color:#111827; margin:0; -webkit-print-color-adjust: exact; print-color-adjust: exact}
+          .page{ width: 210mm; min-height: 297mm; margin: 0 auto; padding: 0 0 10mm 0; box-sizing: border-box; display:flex; flex-direction:column }
+          .content{flex:1 1 auto}
 
-  // Signatories
-  const preparedName = (user ? `${user.first_name || ''} ${user.middle_name ? user.middle_name.charAt(0)+'. ' : ''}${user.last_name || ''}` : '').replace(/\s+/g,' ').trim().toUpperCase()
-  const humanRole = (user?.user_role || '').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase())
-  const preparedTitle = `${humanRole}${user?.position ? ` - ${user.position}` : ''}` || 'Prepared by'
-  const notedName = notedBy ? `${notedBy.first_name || ''} ${notedBy.middle_name ? notedBy.middle_name.charAt(0)+'. ' : ''}${notedBy.last_name || ''}`.replace(/\s+/g,' ').trim().toUpperCase() : ''
-  const notedTitle = notedBy?.position || 'Provincial Agriculturist'
-  const role = (user?.user_role || '').toLowerCase()
-  const colW = (pw - margin*2) / 3
+          .header-wrap{display:flex;align-items:center;gap:16px}
+          .logo{width:84px;height:84px;object-fit:contain}
+          .hdr-title{font-size:22px;font-weight:800;color:#1f2937}
+          .hdr-sub{color:#374151;line-height:1.4;font-size:12px}
+          .spacer{height:16px}
+          .meta{margin-top:16px}
+          .meta-table{width:100%;border-collapse:collapse;font-size:12px}
+          .meta-table th{background:#f3f4f6;text-align:left;padding:6px;font-weight:600;border:1px solid #e5e7eb;width:110px}
+          .meta-table td{padding:6px;border:1px solid #e5e7eb}
+          .bodyp{margin-top:16px;line-height:1.75;color:#111827}
+          .bodyp strong{font-weight:700}
+          .shot{margin-top:18px;border:1px solid #d1d5db;border-radius:4px;overflow:hidden;min-height:60px;display:flex;align-items:center;justify-content:center}
+          #map{width:100%;height:300px}
+          .no-map-msg{font-size:13px;color:#6b7280;padding:24px;text-align:center}
+          .sign{display:flex;justify-content:space-between;margin-top:28px;gap:16px}
+          .sign .col{flex:1}
+          .sign .cap{font-size:12px;color:#374151;margin-bottom:28px}
+          .line{border-top:1px solid #111827;margin-top:40px}
+          .roles{display:flex;flex-direction:column;gap:4px;color:#374151;font-size:12px;margin-top:6px}
+          .footer{margin-top:26px;border-top:1px solid #e5e7eb;padding-top:8px;color:#6b7280;font-size:12px;display:flex;justify-content:space-between}
+          @media print{button{display:none}}
+          .leaflet-container{background:#fff !important}
+        </style>
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+      </head><body>
+        <div class="page">
+        <div class="content">
+          <div class="header-wrap">
+            <img class="logo" src="${logo}" alt="logo" />
+            <div>
+              <div class="hdr-title">Office of the Provincial Agriculturist - Fisheries Section</div>
+              <div class="hdr-sub">
+                Provincial Agriculturist Office, Aguila Road, Brgy. II<br/>
+                City of San Fernando, La Union 2500<br/>
+                Phone: (072) 888-3184 / 607-4492 / 607-4488<br/>
+                Email: opaglaunion@yahoo.com
+              </div>
+            </div>
+          </div>
+          <div class="spacer"></div>
 
-  // Place signatories in the footer band, just above the credits
-  const footerTopY = ph - 40
-  const sigBlockHeight = 80
-  let sy = footerTopY - sigBlockHeight
-  if (sy < y + 16) sy = y + 16
+          <div class="meta">
+            <table class="meta-table">
+              <tbody>
+${metaTableHtml}
+              </tbody>
+            </table>
+          </div>
 
-  const drawSigCol = (idx, cap, name, title) => { const x = margin + colW*idx; doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.text(cap, x, sy); doc.line(x, sy+34, x+colW-16, sy+34); doc.setFont('helvetica','bold'); doc.text(name || '', x+4, sy+52); doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(title || '', x+4, sy+68) }
+          <p class="bodyp">
+            ${boatName}${boatProperName ? ` (${boatProperName})` : ''}, owned by <strong>${owner}</strong>, is now subject to questioning after the boat
+            was observed idle for <strong>${mins} mins</strong> from <strong>${idleStartStr}</strong> to <strong>${idleEndStr}</strong> at location <strong>(${lngDisplay}, ${latDisplay})</strong>,
+            <strong>${n.to_municipality || 'N/A'}</strong>, away from registered municipality <strong>${n.from_municipality || ''}</strong>. An SMS notification has been sent immediately to the
+            fisherfolk’s contact person, <strong>${contactPersonName || 'N/A'}</strong>. Monitoring continues for any movement or activity.
+          </p>
 
-  if (role.includes('municipal')) {
-    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
-    drawSigCol(1, 'Certified by', (n.municipal_agriculturist_name || 'MUNICIPAL AGRICULTURIST'), 'Municipal Agriculturist')
-    drawSigCol(2, 'Noted by', (n.municipal_mayor_name || 'MUNICIPAL MAYOR'), 'Municipal Mayor')
-  } else if (role.includes('provincial')) {
-    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
-    drawSigCol(1, 'Noted by', notedName, notedTitle)
-  } else if (role.includes('admin')) {
-    drawSigCol(0, 'Prepared by', preparedName, humanRole)
-    drawSigCol(1, 'Noted by', notedName, notedTitle)
-  } else {
-    drawSigCol(0, 'Prepared by', preparedName, preparedTitle)
-    drawSigCol(1, 'Noted by', notedName, notedTitle)
-  }
+          ${mapSection}
+        </div>
 
-  // After map and signatories, draw footer at the bottom of the page
-  footer()
+        <div class="sign">
+          <div class="col">
+            <div class="cap">Prepared by:</div>
+            <div class="line"></div>
+            <div class="roles">
+              <span>${(generatedByName || '').toUpperCase() || 'PREPARED BY'}</span>
+              <span>${generatedByTitle || ''}</span>
+            </div>
+          </div>
+          <div class="col">
+            <div class="cap">Noted by:</div>
+            <div class="line"></div>
+            <div class="roles">
+              <span>${(notedName || notedTitle || 'Provincial Agriculturist').toUpperCase()}</span>
+              <span>${notedTitle}</span>
+            </div>
+          </div>
+        </div>
 
-  // Open in new tab and trigger print
-  try { doc.autoPrint() } catch {}
-  const blobUrl = doc.output('bloburl')
-  const w = window.open(blobUrl, '_blank')
-  // Some browsers need a delay before print
-  try { if (w) setTimeout(() => w.print && w.print(), 500) } catch {}
+        <div class="footer"><span> Office of the Provincial Agriculturist - Fisheries Section.</span><span>Date Generated: ${dateShort}</span></div>
+        <button onclick="window.print()" style="margin-top:16px;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;background:#fff">Print</button>
+        </div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+        ${mapScript}
+      </body></html>`
 
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(html)
+  w.document.close()
 }
 
 // Messenger-style notification list item
@@ -689,9 +577,7 @@ const NotificationDetailView = ({ n, onDownload, user, notedBy, onSaved }) => {
           onClick={() => onDownload(n)}
           className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-sm flex items-center justify-center gap-2"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 9V4a2 2 0 012-2h8a2 2 0 012 2v5M6 14h12M6 18h8M6 10h12" />
-          </svg>
+          <PrinterIcon className="w-5 h-5" />
           Print Report
         </button>
       </div>
@@ -795,7 +681,11 @@ const Notifications = () => {
 
   const handlePrint = async (n) => {
     try {
-      await downloadPdf(n, user, notedBy)
+      const generatedByName = user
+        ? `${user.first_name || ''} ${user.middle_name ? `${user.middle_name.charAt(0)}. ` : ''}${user.last_name || ''}`.replace(/\s+/g,' ').trim()
+        : ''
+      const generatedByTitle = (user?.position || '').trim() || ((user?.user_role || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) || ''
+      await downloadPdf(n, generatedByName, generatedByTitle, notedBy)
     } catch (e) {
       console.error('Print failed', e)
     }

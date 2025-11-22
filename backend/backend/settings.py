@@ -162,7 +162,6 @@ else:
         },
     }
 
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
@@ -171,9 +170,9 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'db_banka',
         'USER': 'root',
-        'PASSWORD': '12311332Asa@!',
+        'PASSWORD': '',
         'HOST': 'localhost',
-        'PORT': '3307',
+        'PORT': '3306',
         'OPTIONS': {
             'charset': 'utf8mb4',
         },

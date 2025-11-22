@@ -272,10 +272,13 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
       }
     };
     const addSectionHeader = (title) => {
-      ensureSpace(40);
+      // Reserve enough space for the header *and* at least one row of content
+      // so the section doesn't get split with the title at the bottom of a page
+      ensureSpace(100);
       doc.setFillColor(...lightBg);
       doc.rect(margin, y - 4, pageWidth - margin * 2, 26, 'F');
       doc.setTextColor(...primary);
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(13);
       doc.text(title, margin + 8, y + 14);
@@ -339,29 +342,44 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
       doc.setFontSize(11);
     };
     const addSignatoriesGrid = (list) => {
-      // list: [{name, position}]
+      // list: [{ first_name, middle_name, last_name, position }]
       const cols = Math.min(3, list.length || 3);
       const colWidth = (pageWidth - margin * 2) / cols;
       let col = 0;
+      let rowMaxHeight = 0;
+
       list.forEach((s, i) => {
-        ensureSpace(60);
+        // Reserve more space so long names can wrap without touching the footer
+        ensureSpace(90);
+
         const xCenter = margin + col * colWidth + colWidth / 2;
-        // draw underline first (fixed width for consistency)
-        const lineWidth = 140;
+        const lineWidth = Math.min(140, colWidth - 20);
         doc.setDrawColor(0, 0, 0);
         doc.line(xCenter - lineWidth / 2, y, xCenter + lineWidth / 2, y);
-        // name below the line
-        const name = formatNameWithMiddleInitial(s.first_name, s.middle_name, s.last_name).toUpperCase();
+
+        // Wrap long names within the column to avoid overlapping into neighbors
+        const rawName = formatNameWithMiddleInitial(s.first_name, s.middle_name, s.last_name).toUpperCase();
+        const maxNameWidth = colWidth - 20;
         doc.setFont('helvetica', 'bold');
-        doc.text(name, xCenter, y + 14, { align: 'center' });
-        // position below the name
-        doc.setFont('helvetica', 'normal');
         doc.setFontSize(10);
-        doc.text(s.position || '', xCenter, y + 28, { align: 'center' });
+        const nameLines = doc.splitTextToSize(rawName, Math.max(60, maxNameWidth));
+        doc.text(nameLines, xCenter, y + 14, { align: 'center' });
+
+        // Position label under the (possibly multi-line) name
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const nameHeight = 12 * Math.max(1, nameLines.length);
+        const positionY = y + 14 + nameHeight + 4;
+        doc.text(s.position || '', xCenter, positionY, { align: 'center' });
         doc.setFontSize(11);
+
+        const totalHeight = (positionY - y) + 8;
+        rowMaxHeight = Math.max(rowMaxHeight, totalHeight);
+
         col += 1;
         if (col >= cols || i === list.length - 1) {
-          y += 48;
+          y += rowMaxHeight + 10;
+          rowMaxHeight = 0;
           col = 0;
         }
       });
@@ -460,12 +478,17 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
       : 'None';
 
     addSectionHeader('Household Monthly Income / Other Source of income');
+
+    // Put the main household income on its own row for clarity
     addKVGrid([
       ['Household Monthly Income', fisherfolk?.household_month_income],
+    ], 1, true);
+
+    // Then show the other income sources together on a separate grid
+    addKVGrid([
       ['Farming', fisherfolk?.farming_income_salary || 'None'],
       ['Fisheries', fisherfolk?.fisheries_income_salary || 'None'],
-      ['Other Source of income', oslText],
-    ], 4, true);
+    ], 3, true);
     addDivider();
 
     // Contact Person
@@ -520,19 +543,66 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
     }
 
     // Certification
-    const fullName = formatNameWithMiddleInitial(fisherfolk?.first_name, fisherfolk?.middle_name, fisherfolk?.last_name);
+    const fullName = formatNameWithMiddleInitial(
+      fisherfolk?.first_name,
+      fisherfolk?.middle_name,
+      fisherfolk?.last_name
+    );
     addSectionHeader('Certification');
+
+    // Pre-text paragraph (same wording as on the on-screen form)
+    const certText =
+      'I have personally reviewed the information on this application and I certify under penalty of perjury that to the best of my knowledge and belief the information on this application is true and correct, and that I understand this information is subject to public.';
+    ensureSpace(80);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    const certLines = doc.splitTextToSize(certText, pageWidth - margin * 2);
+    doc.text(certLines, margin, y);
+    const certHeight = 14 * Math.max(1, certLines.length);
+    y += certHeight + 10;
+
+    // Name of Applicant / Date of Application row under the pre-text
     addKVGrid([
-      ['Name of Applicant', `${safe(fisherfolk?.salutations ? fisherfolk.salutations + ' ' : '')}${fullName}`.trim()],
-      ['Date of Application', fisherfolk?.date_added ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString()],
-    ], 3, true);
+      [
+        'Name of Applicant',
+        `${safe(fisherfolk?.salutations ? fisherfolk.salutations + ' ' : '')}${fullName}`.trim(),
+      ],
+      [
+        'Date of Application',
+        fisherfolk?.date_added
+          ? new Date(fisherfolk.date_added).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })
+          : new Date().toLocaleDateString(),
+      ],
+    ], 2, true);
     addDivider();
 
     // Signatories
     addSectionHeader('Signatories');
-    const verifierName = barangayVerifier ? formatNameWithMiddleInitial(barangayVerifier.first_name, barangayVerifier.middle_name, barangayVerifier.last_name) : 'Not assigned';
-    const muniAgri = signatories.municipal ? formatNameWithMiddleInitial(signatories.municipal.first_name, signatories.municipal.middle_name, signatories.municipal.last_name) : 'Not assigned';
-    const mayor = signatories.mayor ? formatNameWithMiddleInitial(signatories.mayor.first_name, signatories.mayor.middle_name, signatories.mayor.last_name) : 'Not assigned';
+    const verifierName = barangayVerifier
+      ? formatNameWithMiddleInitial(
+          barangayVerifier.first_name,
+          barangayVerifier.middle_name,
+          barangayVerifier.last_name
+        )
+      : 'Not assigned';
+    const muniAgri = signatories.municipal
+      ? formatNameWithMiddleInitial(
+          signatories.municipal.first_name,
+          signatories.municipal.middle_name,
+          signatories.municipal.last_name
+        )
+      : 'Not assigned';
+    const mayor = signatories.mayor
+      ? formatNameWithMiddleInitial(
+          signatories.mayor.first_name,
+          signatories.mayor.middle_name,
+          signatories.mayor.last_name
+        )
+      : 'Not assigned';
     addSignatoriesGrid([
       { first_name: verifierName, middle_name: '', last_name: '', position: 'Barangay Captain' },
       { first_name: muniAgri, middle_name: '', last_name: '', position: 'Municipal Agriculturist' },
@@ -677,7 +747,27 @@ const FisherfolkProfile = ({ editPathBuilder }) => {
               </div>
             </div>
             <div className="flex space-x-2">
-              <Button onClick={handlePrintReport} className="bg-purple-600 hover:bg-purple-700 text-white">Print Report</Button>
+              <Button
+                onClick={handlePrintReport}
+                className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+              >
+                <svg
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M7 9V4h10v5m-9 7h8v4H8v-4Zm-3-6h14a2 2 0 0 1 2 2v5H3v-5a2 2 0 0 1 2-2Z"
+                  />
+                </svg>
+                <span>Print Report</span>
+              </Button>
               {!isProvincial && (
                 <>
                   <Button onClick={() => setIsEditModalOpen(true)}>Edit</Button>

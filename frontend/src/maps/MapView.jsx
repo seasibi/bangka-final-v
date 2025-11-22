@@ -719,16 +719,20 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
     Sudipen: "#64748b",
     Tubao: "#737373",
   });
+  const [municipalityNames, setMunicipalityNames] = useState([]);
 
-  // Fetch municipality colors from API
+  // Fetch municipality colors and legend names from API
   useEffect(() => {
     const fetchMunicipalityColors = async () => {
       try {
-        const municipalities = await getMunicipalities();
+        const municipalities = await getMunicipalities({ is_active: true });
         const colorMap = {};
-        municipalities.forEach(muni => {
+        const names = [];
+        municipalities.forEach((muni) => {
+          if (!muni?.name) return;
+          names.push(muni.name);
           colorMap[muni.name] = muni.color;
-          // Add aliases
+          // Add aliases for boundary/boat color matching
           if (muni.name === 'San Fernando') {
             colorMap['City Of San Fernando'] = muni.color;
           }
@@ -736,8 +740,10 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
             colorMap['Sto. Tomas'] = muni.color;
           }
         });
+        names.sort((a, b) => a.localeCompare(b));
+        setMunicipalityNames(names);
         console.log('Loaded municipality colors from database:', colorMap);
-        setMunicipalityColors(prevColors => ({ ...prevColors, ...colorMap }));
+        setMunicipalityColors((prevColors) => ({ ...prevColors, ...colorMap }));
       } catch (error) {
         console.error('Failed to load municipality colors, using defaults:', error);
       }
@@ -745,17 +751,18 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
     fetchMunicipalityColors();
   }, []);
 
-  // Canonical display order
-  const municipalityOrder = [
-    "Agoo","Aringay","Bacnotan","Bagulin","Balaoan","Bangar","Bauang","Burgos","Caba",
-    "City Of San Fernando","Luna","Naguilian","Pugo","Rosario","San Gabriel","San Juan",
-    "Santo Tomas","Santol","Sudipen","Tubao"
+  // Default display order used only as a fallback when API data isn't available
+  const defaultMunicipalityOrder = [
+    "Agoo", "Aringay", "Bacnotan", "Bagulin", "Balaoan", "Bangar", "Bauang", "Burgos", "Caba",
+    "City Of San Fernando", "Luna", "Naguilian", "Pugo", "Rosario", "San Gabriel", "San Juan",
+    "Santo Tomas", "Santol", "Sudipen", "Tubao",
   ];
 
-  // ...existing code...
-
-  // ...existing code...
-
+  // Legend municipalities: prefer active municipalities from API, fall back to default order
+  const legendMunicipalities = useMemo(
+    () => (municipalityNames.length ? municipalityNames : defaultMunicipalityOrder),
+    [municipalityNames]
+  );
   // Helper to normalize municipality aliases
   const normalizeMuni = (name) => {
     if (!name) return name;
@@ -1598,7 +1605,7 @@ const MapView = ({ boundaryType = "both", searchMfbr = "" }) => {
         >
           <div className="p-4 space-y-2">
             <div className="grid grid-cols-2 gap-1 text-xs">
-              {municipalityOrder.map((name) => {
+              {legendMunicipalities.map((name) => {
                 const color = municipalityColors[name] || "#CCCCCC";
                 return (
                   <div key={name} className="flex items-center gap-2">
