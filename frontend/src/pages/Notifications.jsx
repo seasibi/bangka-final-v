@@ -333,8 +333,46 @@ const NotificationDetailView = ({ n, onDownload, user, notedBy, onSaved }) => {
 
   const reportNo = useMemo(() => formatReportNo(n.id, n.created_at), [n.id, n.created_at])
   const boatName = n.mfbr_number || n.boat_name || `Boat ${n.boat || ''}`
+  const boatProperName = n.boat_name || n.boat || ''
   const mins = n.dwell_duration_minutes ?? Math.floor((n.dwell_duration || 0) / 60)
   const owner = n.fisherfolk_name || 'N/A'
+  const fallbackContact = deriveContactFromNotification(n)
+  const [contactPerson, setContactPerson] = useState(fallbackContact)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadContact = async () => {
+      try {
+        const fetched = await fetchFisherfolkContactDetails(n)
+        if (!cancelled && fetched) {
+          setContactPerson(fetched)
+        } else if (!cancelled) {
+          setContactPerson(fallbackContact)
+        }
+      } catch {
+        if (!cancelled) setContactPerson(fallbackContact)
+      }
+    }
+    loadContact()
+    return () => { cancelled = true }
+  }, [n?.id, fallbackContact.name, fallbackContact.number])
+
+  const contactPersonName = contactPerson?.name || fallbackContact.name
+
+  const latNumDetail = Number(n.current_lat)
+  const lngNumDetail = Number(n.current_lng)
+  const hasCoordsDetail = Number.isFinite(latNumDetail) && Number.isFinite(lngNumDetail)
+  const latDisplayDetail = hasCoordsDetail ? latNumDetail.toFixed(5) : 'N/A'
+  const lngDisplayDetail = hasCoordsDetail ? lngNumDetail.toFixed(5) : 'N/A'
+
+  const dwellSecsDetail = Number.isFinite(Number(n.dwell_duration))
+    ? Number(n.dwell_duration)
+    : ((Number(n.dwell_duration_minutes) || 0) * 60)
+  const idleStartDtDetail = new Date(n.violation_timestamp || n.created_at)
+  const idleEndDtDetail = new Date(idleStartDtDetail.getTime() + dwellSecsDetail * 1000)
+  const idleStartStrDetail = idleStartDtDetail.toLocaleString()
+  const idleEndStrDetail = idleEndDtDetail.toLocaleString()
+
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [reportStatus, setReportStatus] = useState(n.report_status || 'Not Reported')
@@ -439,10 +477,19 @@ const NotificationDetailView = ({ n, onDownload, user, notedBy, onSaved }) => {
           {/* Main Message */}
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <p className="text-sm text-gray-800 leading-relaxed">
-              <span className="font-semibold">{boatName}</span> is now being subjected to questioning due to being idle for <span className="font-semibold">{mins} minutes</span> at the location (<span className="font-mono text-xs">{toFixedOrNA(n.current_lng)}, {toFixedOrNA(n.current_lat)}</span>), <span className="font-semibold">{n.to_municipality}</span>.
-            </p>
-            <p className="text-sm text-gray-600 mt-3">
-              An SMS notification will be sent immediately to the boat owner (<span className="font-semibold">{owner}</span>).
+              <span className="font-semibold">
+                {boatName}
+                {boatProperName ? ` (${boatProperName})` : ''}
+              </span>
+              {', '}owned by <span className="font-semibold">{owner}</span>, is now subject to questioning after the boat was observed idle for{' '}
+              <span className="font-semibold">{mins} mins</span>{' '}
+              from <span className="font-semibold">{idleStartStrDetail}</span>{' '}
+              to <span className="font-semibold">{idleEndStrDetail}</span>{' '}
+              at location{' '}
+              <span className="font-semibold">({lngDisplayDetail}, {latDisplayDetail})</span>,{' '}
+              <span className="font-semibold">{n.to_municipality || 'N/A'}</span>, away from registered municipality{' '}
+              <span className="font-semibold">{n.from_municipality || ''}</span>. An SMS notification has been sent immediately to the fisherfolk’s contact person,{' '}
+              <span className="font-semibold">{contactPersonName || 'N/A'}</span>. Monitoring continues for any movement or activity.
             </p>
           </div>
 
